@@ -70,7 +70,7 @@
         <button class="nav-item" data-tab="settings" data-admin-only><i>⚙</i> Settings</button>
       </nav>
       <div class="user-chip">
-        <div id="meAvatar" class="av"></div>
+        <button id="meAvatarBtn" class="photo-btn" title="My profile"></button>
         <div class="meta">
           <b id="meName"></b>
           <span id="meRole" class="pill"></span>
@@ -258,6 +258,24 @@
       </div>
     </div>
   </div>
+
+  <div id="profileModal" class="modal">
+    <div class="modal-card profile-card">
+      <div class="card-head">
+        <h3>My profile</h3>
+        <button id="profileClose" class="del" title="Close">✕</button>
+      </div>
+      <div id="profileAvatar" class="profile-avatar"></div>
+      <b id="profileName"></b>
+      <small id="profileEmail" class="muted"></small>
+      <div class="profile-actions">
+        <button id="btnUploadPhoto" class="btn btn-primary btn-small">Upload photo</button>
+        <button id="btnRemovePhoto" class="btn btn-ghost btn-small">Remove photo</button>
+      </div>
+      <p class="muted small">Pick any photo. It's cropped to a square and shrunk automatically.</p>
+    </div>
+  </div>
+  <input id="photoInput" type="file" accept="image/*" hidden>
 
   <div id="toast" class="toast"></div>
   <script type="module" src="app.js"></script>

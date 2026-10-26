@@ -24,7 +24,28 @@ const initials = (n) => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const fmtMin = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.round(m) % 60)}`;
 const coords = (loc) => `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
-const avatar = (u) => `<div class="av" style="background:${u?.color || '#8b5cff'}">${esc(initials(u?.name))}</div>`;
+const hasPhoto = (u) => typeof u?.photo === 'string' && u.photo.startsWith('data:image/');
+const avatar = (u, cls = '') => hasPhoto(u)
+  ? `<img class="av ${cls}" src="${esc(u.photo)}" alt="${esc(u.name)}">`
+  : `<div class="av ${cls}" style="background:${u?.color || '#8b5cff'}">${esc(initials(u?.name))}</div>`;
+
+// Center-crop and shrink a picked image to a small JPEG data URL (kept in the user's profile).
+function resizePhoto(file, size = 192) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) return reject(new Error('Please choose an image file.'));
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => reject(new Error('Could not read that image. Try a JPG or PNG.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
 const isOwner = (u) => !!OWNER_EMAIL && u?.email === OWNER_EMAIL.toLowerCase();
 
 let store, me = null, settings = { start: '09:30', grace: 10 }, users = [];
@@ -235,7 +256,7 @@ function renderMembers() {
       : `<button class="btn btn-ghost btn-xs" data-role="${u.uid}" data-to="admin">Make admin</button>`;
     const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member">✕</button>`;
     return `<div class="card member">
-      ${avatar(u)}
+      <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">📷</span></button>
       <div class="meta">
         <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
         <small>${esc(u.email)}</small>
@@ -309,6 +330,48 @@ async function loadShared() {
   $('#setGrace').value = settings.grace;
 }
 
+function renderMe() {
+  $('#meAvatarBtn').innerHTML = avatar(me);
+  $('#meName').textContent = me.name;
+  $('#profileAvatar').innerHTML = avatar(me, 'av-xl');
+  $('#profileName').textContent = me.name;
+  $('#profileEmail').textContent = me.email;
+  $('#btnRemovePhoto').hidden = !hasPhoto(me);
+}
+
+// ---------- Profile photos ----------
+let photoTarget = null; // uid whose photo is being changed
+
+function pickPhoto(uid) {
+  photoTarget = uid;
+  $('#photoInput').value = '';
+  $('#photoInput').click();
+}
+
+async function setPhoto(uid, photo) {
+  const ok = await guard(async () => { await store.updateUser(uid, { photo }); return true; });
+  if (!ok) return;
+  const u = userById(uid);
+  if (u) u.photo = photo;
+  if (uid === me.uid) { me.photo = photo; renderMe(); }
+  if (currentTab === 'members') renderMembers();
+  if (currentTab === 'dashboard') renderDashboard();
+  toast(photo ? 'Photo updated' : 'Photo removed');
+}
+
+$('#photoInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file || !photoTarget) return;
+  const photo = await guard(() => resizePhoto(file));
+  if (photo) await setPhoto(photoTarget, photo);
+});
+
+$('#meAvatarBtn').addEventListener('click', () => $('#profileModal').classList.add('open'));
+$('#profileClose').addEventListener('click', () => $('#profileModal').classList.remove('open'));
+$('#profileModal').addEventListener('click', (e) => { if (e.target.id === 'profileModal') $('#profileModal').classList.remove('open'); });
+$('#btnUploadPhoto').addEventListener('click', () => pickPhoto(me.uid));
+$('#btnRemovePhoto').addEventListener('click', () => setPhoto(me.uid, ''));
+
 async function enterApp(profile) {
   me = profile;
   $('#boot').hidden = true;
@@ -316,8 +379,7 @@ async function enterApp(profile) {
   $('#removedScreen').hidden = true;
   $('#appShell').hidden = false;
   $('#demoBanner').hidden = store.mode !== 'demo';
-  $('#meAvatar').outerHTML = `<div id="meAvatar" class="av" style="background:${me.color}">${esc(initials(me.name))}</div>`;
-  $('#meName').textContent = me.name;
+  renderMe();
   $('#meRole').textContent = isOwner(me) ? 'Owner' : isAdmin() ? 'Admin' : 'Member';
   $('#meRole').className = 'pill ' + (isAdmin() ? 'admin' : 'member');
   $('#helloName').textContent = me.name.split(' ')[0];
@@ -374,7 +436,7 @@ document.addEventListener('click', (e) => {
 });
 $('#mapClose').addEventListener('click', closeMap);
 $('#mapModal').addEventListener('click', (e) => { if (e.target.id === 'mapModal') closeMap(); });
-addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMap(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMap(); $('#profileModal').classList.remove('open'); } });
 
 // Team
 $('#memberForm').addEventListener('submit', async (e) => {
@@ -395,6 +457,8 @@ $('#memberForm').addEventListener('submit', async (e) => {
 });
 
 $('#memberList').addEventListener('click', async (e) => {
+  const photoBtn = e.target.closest('[data-photo]');
+  if (photoBtn) return pickPhoto(photoBtn.dataset.photo);
   const roleBtn = e.target.closest('[data-role]');
   const delBtn = e.target.closest('[data-del]');
   if (roleBtn) {

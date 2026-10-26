@@ -255,6 +255,20 @@ td.actions .btn + .btn { margin-left: 6px; }
   .member-form { grid-template-columns: 1fr; }
 }
 
+/* Profile photos */
+img.av { object-fit: cover; display: block; border: 1px solid rgba(255,255,255,.12); }
+.photo-btn { all: unset; cursor: pointer; position: relative; border-radius: 12px; flex-shrink: 0; display: block; }
+.photo-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.photo-btn .cam { position: absolute; right: -6px; bottom: -6px; font-size: 11px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: #14142a; border: 1px solid var(--border); opacity: 0; transition: opacity .2s; }
+.photo-btn:hover .cam, .photo-btn:focus-visible .cam { opacity: 1; }
+.photo-btn:hover .av { box-shadow: 0 0 0 2px var(--cyan); }
+.profile-card { width: min(380px, 100%); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+.profile-card .card-head { width: 100%; }
+.profile-avatar { margin: 4px 0 10px; padding: 4px; border-radius: 50%; background: conic-gradient(var(--cyan), var(--violet), var(--pink), var(--cyan)); }
+.av.av-xl { width: 132px; height: 132px; border-radius: 50%; font-size: 40px; border: 4px solid #0e0e1e; }
+.profile-actions { display: flex; gap: 10px; margin: 14px 0 4px; flex-wrap: wrap; justify-content: center; }
+@media (hover: none) { .photo-btn .cam { opacity: 1; } }
+
 .credit { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .credit b { font-weight: 600; background: linear-gradient(90deg, var(--cyan), var(--violet), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .credit .dot { color: var(--violet); }

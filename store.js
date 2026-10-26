@@ -23,7 +23,8 @@ const friendly = (e) => {
 };
 
 export async function createStore() {
-  const configured = !!firebaseConfig.apiKey;
+  // ?demo in the URL forces the local demo store (handy for trying things without touching real data).
+  const configured = !!firebaseConfig.apiKey && !new URLSearchParams(location.search).has('demo');
   const store = configured ? await firebaseStore() : localStore();
   // Normalise error messages for the UI.
   for (const k of Object.keys(store)) {
