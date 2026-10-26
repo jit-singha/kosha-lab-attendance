@@ -1,11 +1,11 @@
 rules_version = '2';
 
 // Kosha Lab Attendance Tracker — Firestore security rules.
-// Replace OWNER_EMAIL_HERE with the same email you put in firebase-config.js.
+// The owner email below must match OWNER_EMAIL in firebase-config.js.
 service cloud.firestore {
   match /databases/{db}/documents {
     function signedIn() { return request.auth != null; }
-    function isOwner() { return signedIn() && request.auth.token.email == 'OWNER_EMAIL_HERE'; }
+    function isOwner() { return signedIn() && request.auth.token.email == 'js0234092@gmail.com'; }
     function myDoc() { return /databases/$(db)/documents/users/$(request.auth.uid); }
     function isMember() { return signedIn() && exists(myDoc()); }
     function isAdmin() { return isOwner() || (isMember() && get(myDoc()).data.role == 'admin'); }
