@@ -27,6 +27,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Logo: anyone can read it (shown on the sign-in page); only admins can change it.
+    match /branding/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Attendance: members write only their own record, with a timestamp close to server time.
     match /attendance/{id} {
       allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);

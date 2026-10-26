@@ -339,6 +339,59 @@ function renderMe() {
   $('#btnRemovePhoto').hidden = !hasPhoto(me);
 }
 
+// ---------- Logo ----------
+const LOGO_CACHE = 'koshalab.logo';
+const DEFAULT_FAVICON = $('#favicon').href;
+let logo = '';
+try { logo = localStorage.getItem(LOGO_CACHE) || ''; } catch {}
+
+// Shrink a logo to fit within `max` px, keeping its shape and transparency.
+function resizeLogo(file, max = 256) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) return reject(new Error('Please choose an image file.'));
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Could not read that image. Try a PNG, JPG or SVG.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function applyLogo(src) {
+  logo = typeof src === 'string' && src.startsWith('data:image/') ? src : '';
+  try { logo ? localStorage.setItem(LOGO_CACHE, logo) : localStorage.removeItem(LOGO_CACHE); } catch {}
+  $$('.logo-mark').forEach((m) => {
+    m.classList.toggle('has-logo', !!logo);
+    m.innerHTML = logo ? `<img src="${esc(logo)}" alt="Kosha Lab logo">` : '<span></span>';
+  });
+  $('#logoPreview').innerHTML = logo ? `<img src="${esc(logo)}" alt="Current logo">` : '<span class="muted small">No logo yet</span>';
+  $('#btnRemoveLogo').hidden = !logo;
+  $('#favicon').href = logo || DEFAULT_FAVICON;
+}
+
+async function saveLogo(src) {
+  if (await guard(async () => { await store.saveBranding({ logo: src }); return true; })) {
+    applyLogo(src);
+    toast(src ? 'Logo updated' : 'Logo removed');
+  }
+}
+
+$('#btnUploadLogo').addEventListener('click', () => { $('#logoInput').value = ''; $('#logoInput').click(); });
+$('#btnRemoveLogo').addEventListener('click', () => { if (confirm('Remove the logo?')) saveLogo(''); });
+$('#logoInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const src = await guard(() => resizeLogo(file));
+  if (src) await saveLogo(src);
+});
+applyLogo(logo);
+
 // ---------- Profile photos ----------
 let photoTarget = null; // uid whose photo is being changed
 
@@ -559,6 +612,8 @@ addEventListener('resize', resize); resize(); frame();
 $('#dashDate').value = dayKey();
 try {
   store = await createStore();
+  // Public read; if it fails (e.g. rules not updated yet) keep the cached logo.
+  store.getBranding().then((b) => applyLogo(b.logo)).catch(() => {});
   store.onAuth((s) => {
     if (!s) return showAuth();
     if (!s.profile) {

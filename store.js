@@ -81,6 +81,8 @@ function localStore() {
     },
     async getSettings() { return { ...DEFAULT_SETTINGS, ...s.settings }; },
     async saveSettings(v) { s.settings = { ...s.settings, ...v }; write(); },
+    async getBranding() { return s.branding || {}; },
+    async saveBranding(v) { s.branding = { ...s.branding, ...v }; write(); },
     async getAttendance(id) { return s.attendance[id] || null; },
     async saveAttendance(rec) { s.attendance[rec.id] = { ...s.attendance[rec.id], ...rec }; write(); },
     async attendanceByDate(date) { return Object.values(s.attendance).filter((r) => r.date === date); },
@@ -148,6 +150,9 @@ async function firebaseStore() {
     async removeUser(id) { await F.deleteDoc(ref('users', id)); },
     async getSettings() { const d = await F.getDoc(ref('settings', 'app')); return { ...DEFAULT_SETTINGS, ...(d.exists() ? d.data() : {}) }; },
     async saveSettings(v) { await F.setDoc(ref('settings', 'app'), v, { merge: true }); },
+    // Branding (logo) is public so the sign-in page can show it.
+    async getBranding() { const d = await F.getDoc(ref('branding', 'app')); return d.exists() ? d.data() : {}; },
+    async saveBranding(v) { await F.setDoc(ref('branding', 'app'), v, { merge: true }); },
     async getAttendance(id) { const d = await F.getDoc(ref('attendance', id)); return d.exists() ? d.data() : null; },
     async saveAttendance(rec) { await F.setDoc(ref('attendance', rec.id), rec, { merge: true }); },
     async attendanceByDate(date) { return all(F.query(col('attendance'), F.where('date', '==', date))); },
