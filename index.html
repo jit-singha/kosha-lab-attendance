@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kosha Lab Attendance Tracker</title>
+  <meta name="description" content="Daily attendance tracker with late-login detection, precise location capture, admin roles and laptop take-home log.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+
+  <div id="boot" class="boot"><div class="logo-mark"><span></span></div>Loading…</div>
+
+  <!-- AUTH -->
+  <div id="authScreen" class="auth" hidden>
+    <div class="auth-card card">
+      <div class="logo">
+        <div class="logo-mark"><span></span></div>
+        <div>
+          <div class="logo-name">Kosha Lab</div>
+          <div class="logo-sub">Attendance Tracker</div>
+        </div>
+      </div>
+      <div class="seg">
+        <button class="seg-btn active" data-auth="signin">Sign in</button>
+        <button class="seg-btn" data-auth="signup">Create account</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <label class="field signup-only" hidden><span>Full name</span><input id="aName" autocomplete="name"></label>
+        <label class="field"><span>Email</span><input id="aEmail" type="email" autocomplete="email" required></label>
+        <label class="field"><span>Password</span><input id="aPass" type="password" autocomplete="current-password" minlength="6" required></label>
+        <button id="authBtn" class="btn btn-primary" type="submit">Sign in</button>
+        <div id="authErr" class="form-err"></div>
+      </form>
+      <p id="authNote" class="muted small"></p>
+      <div class="credit"><span>Made by <b>Jit Singh</b></span></div>
+    </div>
+  </div>
+
+  <!-- REMOVED -->
+  <div id="removedScreen" class="auth" hidden>
+    <div class="auth-card card">
+      <h3>Account not active</h3>
+      <p class="muted">Your account has been removed or is not set up yet. Please contact a Kosha Lab admin.</p>
+      <button class="btn btn-ghost js-signout">Sign out</button>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="appShell" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-mark"><span></span></div>
+        <div>
+          <div class="logo-name">Kosha Lab</div>
+          <div class="logo-sub">Attendance Tracker</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-tab="punch"><i>◉</i> Check In</button>
+        <button class="nav-item" data-tab="history" data-member-only><i>◷</i> My Attendance</button>
+        <button class="nav-item" data-tab="dashboard" data-admin-only><i>▦</i> Dashboard</button>
+        <button class="nav-item" data-tab="laptops"><i>▭</i> Laptops</button>
+        <button class="nav-item" data-tab="members" data-admin-only><i>◎</i> Team &amp; Access</button>
+        <button class="nav-item" data-tab="settings" data-admin-only><i>⚙</i> Settings</button>
+      </nav>
+      <div class="user-chip">
+        <div id="meAvatar" class="av"></div>
+        <div class="meta">
+          <b id="meName"></b>
+          <span id="meRole" class="pill"></span>
+        </div>
+        <button class="del js-signout" title="Sign out">⏻</button>
+      </div>
+    </aside>
+
+    <div class="content">
+      <div id="demoBanner" class="banner" hidden>
+        Demo mode: data is saved only in this browser. Add your Firebase config to share data across devices.
+      </div>
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Check In</h1>
+          <p id="pageSub" class="muted">Record today's attendance with time and location.</p>
+        </div>
+        <div class="clock-card">
+          <div id="clock" class="clock">--:--:--</div>
+          <div id="date" class="date">—</div>
+        </div>
+      </header>
+
+      <main>
+        <!-- CHECK IN -->
+        <section id="tab-punch" class="panel active">
+          <div class="punch-layout">
+            <div class="card punch-card">
+              <div class="ring"><div class="ring-inner"><span id="ringTime">--:--</span><small>current time</small></div></div>
+              <div class="hello">Hello, <b id="helloName"></b></div>
+              <div class="punch-btns">
+                <button id="btnIn" class="btn btn-primary">Check In</button>
+                <button id="btnOut" class="btn btn-ghost">Check Out</button>
+              </div>
+              <div id="punchStatus" class="status-box">Ready when you are.</div>
+              <p class="muted small">📍 Precise location (GPS) is required to check in. Allow location access when your browser asks.</p>
+            </div>
+            <div class="card info-card">
+              <h3>Today's policy</h3>
+              <div class="policy">
+                <div><span class="muted">Shift starts</span><b id="shiftLabel">09:30</b></div>
+                <div><span class="muted">Grace period</span><b><span id="graceLabel">10</span> min</b></div>
+                <div><span class="muted">Late after</span><b id="lateAfterLabel">09:40</b></div>
+              </div>
+              <h3>My recent activity</h3>
+              <ul id="recentList" class="recent"></ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- MY ATTENDANCE -->
+        <section id="tab-history" class="panel">
+          <div class="stats three">
+            <div class="stat c-green"><label>Days present</label><span id="myPresent">0</span></div>
+            <div class="stat c-pink"><label>Late arrivals</label><span id="myLate">0</span></div>
+            <div class="stat c-cyan"><label>Avg. check-in</label><span id="myAvg">—</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>My attendance history</h3></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Date</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th></tr></thead>
+                <tbody id="myBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- DASHBOARD (admin) -->
+        <section id="tab-dashboard" class="panel">
+          <div class="toolbar">
+            <label class="field inline"><span>Date</span><input type="date" id="dashDate"></label>
+            <button id="btnExport" class="btn btn-ghost btn-small">Export CSV</button>
+          </div>
+          <div class="stats">
+            <div class="stat c-cyan"><label>Total members</label><span id="stTotal">0</span></div>
+            <div class="stat c-green"><label>On time</label><span id="stOnTime">0</span></div>
+            <div class="stat c-pink"><label>Late</label><span id="stLate">0</span></div>
+            <div class="stat c-amber"><label>Absent</label><span id="stAbsent">0</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Attendance log</h3><span id="rateBadge" class="badge">0% present</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Member</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th></tr></thead>
+                <tbody id="logBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Late arrivals — all time</h3></div>
+            <div id="lateBoard"></div>
+          </div>
+        </section>
+
+        <!-- LAPTOPS -->
+        <section id="tab-laptops" class="panel">
+          <div class="stats three" data-admin-only>
+            <div class="stat c-amber"><label>Pending approval</label><span id="lpPending">0</span></div>
+            <div class="stat c-cyan"><label>Laptops at home</label><span id="lpOut">0</span></div>
+            <div class="stat c-pink"><label>Overdue</label><span id="lpOverdue">0</span></div>
+          </div>
+          <div class="card">
+            <h3>Request to take a laptop home</h3>
+            <form id="laptopForm" class="laptop-form">
+              <label class="field"><span>Laptop / asset ID</span><input id="lpAsset" placeholder="e.g. KL-LT-014" required></label>
+              <label class="field"><span>Taking home on</span><input id="lpFrom" type="date" required></label>
+              <label class="field"><span>Will return by</span><input id="lpTo" type="date" required></label>
+              <label class="field wide"><span>Reason</span><input id="lpReason" placeholder="e.g. Working on client deliverable over the weekend" required></label>
+              <button class="btn btn-primary" type="submit">Submit request</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3 id="lpTitle">My laptop requests</h3>
+              <select id="lpFilter" class="small-select" data-admin-only>
+                <option value="all">All requests</option>
+                <option value="pending">Pending</option>
+                <option value="out">At home now</option>
+                <option value="overdue">Overdue</option>
+                <option value="returned">Returned</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th data-admin-only>Member</th><th>Laptop</th><th>Period</th><th>Reason</th><th>Status</th><th data-admin-only>Action</th></tr></thead>
+                <tbody id="lpBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TEAM (admin) -->
+        <section id="tab-members" class="panel">
+          <div class="card">
+            <h3>Add member</h3>
+            <p class="muted small form-hint">Creates a login for them. Share the email and temporary password with the person.</p>
+            <form id="memberForm" class="member-form">
+              <input id="mName" placeholder="Full name" required>
+              <input id="mEmail" type="email" placeholder="Email" required>
+              <input id="mPass" placeholder="Temporary password (min 6)" minlength="6" required>
+              <input id="mId" placeholder="Employee ID">
+              <input id="mDept" placeholder="Role / Department">
+              <select id="mRole"><option value="member">Member</option><option value="admin">Admin</option></select>
+              <button class="btn btn-primary" type="submit">Add member</button>
+            </form>
+            <div id="memberErr" class="form-err"></div>
+          </div>
+          <div id="memberList" class="member-grid"></div>
+        </section>
+
+        <!-- SETTINGS (admin) -->
+        <section id="tab-settings" class="panel">
+          <div class="card settings">
+            <h3>Shift rules</h3>
+            <label class="field"><span>Shift start time</span><input type="time" id="setStart"></label>
+            <label class="field"><span>Grace period (minutes)</span><input type="number" id="setGrace" min="0" max="180"></label>
+            <button id="btnSave" class="btn btn-primary">Save settings</button>
+            <hr>
+            <h3>Data</h3>
+            <button id="btnWipe" class="btn btn-danger">Clear all attendance logs</button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="credit">
+        <span>Kosha Lab Attendance Tracker</span>
+        <span class="dot">•</span>
+        <span>Made by <b>Jit Singh</b></span>
+      </footer>
+    </div>
+  </div>
+
+  <div id="mapModal" class="modal">
+    <div class="modal-card">
+      <div class="card-head">
+        <h3 id="mapTitle">Location</h3>
+        <button id="mapClose" class="del" title="Close">✕</button>
+      </div>
+      <iframe id="mapFrame" title="Check-in location map" loading="lazy"></iframe>
+      <div class="map-info">
+        <div><b id="mapAddr"></b><small id="mapMeta" class="muted"></small></div>
+        <a id="mapGoogle" class="btn btn-ghost btn-small" target="_blank" rel="noopener">Open in Google Maps</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

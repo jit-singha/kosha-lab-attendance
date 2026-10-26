@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Kosha Lab Attendance Tracker — Firestore security rules.
+// Replace OWNER_EMAIL_HERE with the same email you put in firebase-config.js.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function isOwner() { return signedIn() && request.auth.token.email == 'OWNER_EMAIL_HERE'; }
+    function myDoc() { return /databases/$(db)/documents/users/$(request.auth.uid); }
+    function isMember() { return signedIn() && exists(myDoc()); }
+    function isAdmin() { return isOwner() || (isMember() && get(myDoc()).data.role == 'admin'); }
+    function nearNow(ts) { return ts is int && ts > request.time.toMillis() - 300000 && ts < request.time.toMillis() + 300000; }
+
+    // Profiles. People can create their own profile only as a "member";
+    // only admins can grant admin access or remove people.
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if isAdmin()
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == 'member');
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Attendance: members write only their own record, with a timestamp close to server time.
+    match /attendance/{id} {
+      allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+      allow create: if isMember() && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && nearNow(request.resource.data.inTs);
+      allow update: if isMember() && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.inTs == resource.data.inTs
+        && resource.data.outTs == null && nearNow(request.resource.data.outTs);
+      allow delete: if isAdmin();
+    }
+
+    // Laptop take-home requests: members create pending requests; admins approve / reject / mark returned.
+    match /laptops/{id} {
+      allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
+      allow create: if isMember() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+  }
+}
