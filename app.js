@@ -21,7 +21,7 @@ const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-
 const hm = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const niceDate = (k) => new Date(k + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const initials = (n) => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+const initials = (n) => String(n || '?').split(/\s+/).map((w) => w.match(/[\p{L}\p{N}]/u)?.[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const fmtMin = (m) => `${pad(Math.floor(m / 60) % 24)}:${pad(Math.round(m) % 60)}`;
 const coords = (loc) => `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
@@ -638,6 +638,7 @@ const devData = { deployments: [], damages: [] };
 const devEditing = { deployments: null, damages: null };
 let devView = 'deployments';
 let depGeo = null; // GPS fix attached to the deployment being entered
+let devFormsFor = null; // uid the device forms were last prepared for
 
 const canEditRec = (r) => isAdmin() || r.uid === me.uid;
 const devScopeDate = () => $('#devDate').value || dayKey();
@@ -650,6 +651,16 @@ const mapsUrl = (g) => `https://www.google.com/maps?q=${g.lat},${g.lng}`;
 // Older single-type records ({ type, qty }) are read the same way.
 const countsOf = (r) => r.counts || (r.type ? { [r.type]: r.qty } : {});
 const totalOf = (r) => DEVICE_TYPES.reduce((s, t) => s + (countsOf(r)[t] || 0), 0);
+// The operator who took the devices; older records fall back to whoever logged them.
+const cleanName = (n) => String(n || '').trim().replace(/\s+/g, ' ');
+const takenOf = (r) => cleanName(r.takenBy) || r.name || '';
+const userByName = (n) => users.find((u) => u.name.toLowerCase() === n.toLowerCase());
+// Match a typed name to a known spelling ("asha rao" -> "Asha Rao") so totals group together.
+const canonName = (n) => {
+  const c = cleanName(n);
+  const known = [...$('#operatorNames').options].map((o) => o.value).find((v) => v.toLowerCase() === c.toLowerCase());
+  return known || userByName(c)?.name || c;
+};
 const deviceChips = (r) => DEVICE_TYPES.filter((t) => countsOf(r)[t] > 0)
   .map((t) => `<span class="pill dev">${t} × ${countsOf(r)[t]}</span>`).join(' ');
 
@@ -680,18 +691,29 @@ const DEV_FORMS = {
   deployments: {
     title: '#depFormTitle', titles: ['Log a deployment', 'Edit deployment'],
     submit: '#depSubmit', submits: ['Add deployment', 'Save changes'], cancel: '#depCancel', counts: '#depCounts',
-    read: () => ({ date: $('#depDate').value, location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
-    fill: (r) => { $('#depDate').value = r.date; fillCounts($('#depCounts'), countsOf(r)); $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
-    clear: () => { $('#depForm').reset(); fillCounts($('#depCounts')); $('#depDate').value = devScopeDate(); depGeo = null; },
+    by: '#depBy',
+    read: () => ({ date: $('#depDate').value, takenBy: canonName($('#depBy').value), location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
+    fill: (r) => { $('#depDate').value = r.date; $('#depBy').value = takenOf(r); fillCounts($('#depCounts'), countsOf(r)); $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
+    clear: () => { $('#depForm').reset(); fillCounts($('#depCounts')); $('#depDate').value = devScopeDate(); $('#depBy').value = me?.name || ''; depGeo = null; },
   },
   damages: {
     title: '#dmgFormTitle', titles: ['Report damaged devices', 'Edit damage report'],
     submit: '#dmgSubmit', submits: ['Add damage report', 'Save changes'], cancel: '#dmgCancel', counts: '#dmgCounts',
-    read: () => ({ date: $('#dmgDate').value, ids: $('#dmgIds').value.trim(), issue: $('#dmgIssue').value.trim(), status: $('#dmgStatus').value }),
-    fill: (r) => { $('#dmgDate').value = r.date; fillCounts($('#dmgCounts'), countsOf(r)); $('#dmgIds').value = r.ids || ''; $('#dmgIssue').value = r.issue; $('#dmgStatus').value = r.status || 'reported'; },
-    clear: () => { $('#dmgForm').reset(); fillCounts($('#dmgCounts')); $('#dmgDate').value = devScopeDate(); },
+    by: '#dmgBy',
+    read: () => ({ date: $('#dmgDate').value, takenBy: canonName($('#dmgBy').value), ids: $('#dmgIds').value.trim(), issue: $('#dmgIssue').value.trim(), status: $('#dmgStatus').value }),
+    fill: (r) => { $('#dmgDate').value = r.date; $('#dmgBy').value = takenOf(r); fillCounts($('#dmgCounts'), countsOf(r)); $('#dmgIds').value = r.ids || ''; $('#dmgIssue').value = r.issue; $('#dmgStatus').value = r.status || 'reported'; },
+    clear: () => { $('#dmgForm').reset(); fillCounts($('#dmgCounts')); $('#dmgDate').value = devScopeDate(); $('#dmgBy').value = me?.name || ''; },
   },
 };
+
+// Suggest known names in the "Taken by" fields: team members (admins see everyone) and names used before.
+function refreshOperatorNames() {
+  const names = new Map();
+  const add = (n) => { const c = cleanName(n); if (c) names.set(c.toLowerCase(), c); };
+  users.filter((u) => u.role === 'operator' || u.role === 'admin' || u.uid === me.uid).forEach((u) => add(u.name));
+  [...devData.deployments, ...devData.damages].forEach((r) => add(takenOf(r)));
+  $('#operatorNames').innerHTML = [...names.values()].sort((a, b) => a.localeCompare(b)).map((n) => `<option value="${esc(n)}"></option>`).join('');
+}
 
 function setDevEditing(c, rec) {
   const f = DEV_FORMS[c];
@@ -707,12 +729,26 @@ async function loadDevices() {
   const [dep, dmg] = await Promise.all([guard(() => store.listRecords('deployments')), guard(() => store.listRecords('damages'))]);
   devData.deployments = dep || [];
   devData.damages = dmg || [];
+  // A different person signed in on this device: start their forms fresh with their own name.
+  if (devFormsFor !== me.uid) {
+    devFormsFor = me.uid;
+    setDevEditing('deployments', null);
+    setDevEditing('damages', null);
+  }
+  for (const c of ['deployments', 'damages']) {
+    if (!devEditing[c] && !$(DEV_FORMS[c].by).value) $(DEV_FORMS[c].by).value = me.name;
+  }
+  refreshOperatorNames();
   renderDevices();
 }
 
 function operatorCell(r) {
-  const u = userById(r.uid) || { name: r.name, color: '#5b8cff' };
-  return `<div class="who">${avatar(u)}<div>${esc(u.name || r.name)}${r.updatedByName && r.updatedByName !== r.name ? `<small>edited by ${esc(r.updatedByName)}</small>` : ''}</div></div>`;
+  const who = takenOf(r);
+  const u = userByName(who) || { name: who, color: '#5b8cff' };
+  const notes = [];
+  if (r.name && r.name.toLowerCase() !== who.toLowerCase()) notes.push(`logged by ${esc(r.name)}`);
+  if (r.updatedByName && r.updatedByName !== r.name) notes.push(`edited by ${esc(r.updatedByName)}`);
+  return `<div class="who">${avatar(u)}<div>${esc(who)}${notes.map((n) => `<small>${n}</small>`).join('')}</div></div>`;
 }
 
 const recActions = (c, r) => (canEditRec(r)
@@ -764,12 +800,13 @@ function renderDevices() {
   }).join('') : `<tr><td colspan="8" class="empty">No damage reported${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 }
 
-// Totals per operator (the person who logged the record), per device type.
+// Totals per operator (the person who took the devices), per device type.
 function operatorTotals(scoped) {
   const ops = new Map();
   const row = (r) => {
-    if (!ops.has(r.uid)) ops.set(r.uid, { uid: r.uid, name: r.name, deployments: {}, damages: {} });
-    return ops.get(r.uid);
+    const name = takenOf(r), key = name.toLowerCase();
+    if (!ops.has(key)) ops.set(key, { name: userByName(name)?.name || name, deployments: {}, damages: {} });
+    return ops.get(key);
   };
   for (const c of ['deployments', 'damages']) {
     for (const r of scoped[c]) {
@@ -788,8 +825,8 @@ function renderOperatorSummary(scoped) {
   const ops = operatorTotals(scoped);
   const cells = (m, total, cls) => DEVICE_TYPES.map((t) => `<td class="${cls}${m[t] ? '' : ' zero'}">${m[t] || 0}</td>`).join('') + `<td class="${cls} tot">${total}</td>`;
   $('#opSumBody').innerHTML = ops.length ? ops.map((o) => {
-    const u = userById(o.uid) || { name: o.name, color: '#5b8cff' };
-    return `<tr><td><div class="who">${avatar(u)}<div>${esc(u.name || o.name)}</div></div></td>${cells(o.deployments, o.depTotal, 'dep')}${cells(o.damages, o.dmgTotal, 'dmg')}</tr>`;
+    const u = userByName(o.name) || { name: o.name, color: '#5b8cff' };
+    return `<tr><td><div class="who">${avatar(u)}<div>${esc(o.name)}</div></div></td>${cells(o.deployments, o.depTotal, 'dep')}${cells(o.damages, o.dmgTotal, 'dmg')}</tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">No records${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 }
 
@@ -816,6 +853,7 @@ async function saveDevRecord(c) {
   if (!total) return toast('Enter how many 03W, Pi or Cubic devices — at least one.');
   const data = { ...DEV_FORMS[c].read(), counts, qty: total };
   if (!data.date) return toast('Please pick a date.');
+  if (!data.takenBy) return toast('Please enter the name of the operator.');
   const id = devEditing[c];
   const ok = await guard(async () => {
     if (id) await store.updateRecord(c, id, { ...data, updatedAt: Date.now(), updatedBy: me.uid, updatedByName: me.name });
@@ -889,21 +927,21 @@ $('#dmgBody').addEventListener('change', async (e) => {
 
 $('#btnExportDep').addEventListener('click', () => {
   const rows = devData.deployments.filter(inDevScope).sort(byNewest).map((r) => [
-    niceDate(r.date), r.name, ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
+    niceDate(r.date), takenOf(r), ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
     r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
-    r.notes, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
+    r.notes, r.name, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-deployments-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Operator', ...DEVICE_TYPES, 'Total devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged at', 'Last edited at', 'Last edited by'], rows);
+    ['Date', 'Taken by (operator)', ...DEVICE_TYPES, 'Total devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged by', 'Logged at', 'Last edited at', 'Last edited by'], rows);
   toast(`Exported ${rows.length} deployment record${rows.length === 1 ? '' : 's'}`);
 });
 
 $('#btnExportDmg').addEventListener('click', () => {
   const rows = devData.damages.filter(inDevScope).sort(byNewest).map((r) => [
-    niceDate(r.date), r.name, ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
+    niceDate(r.date), takenOf(r), ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
     r.ids, r.issue, (DAMAGE_STATUS[r.status] || DAMAGE_STATUS.reported)[1],
-    stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
+    r.name, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-damage-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Operator', ...DEVICE_TYPES.map((t) => `${t} damaged`), 'Total damaged', 'Device IDs', 'Issue', 'Status', 'Reported at', 'Last updated at', 'Last updated by'], rows);
+    ['Date', 'Operator', ...DEVICE_TYPES.map((t) => `${t} damaged`), 'Total damaged', 'Device IDs', 'Issue', 'Status', 'Reported by', 'Reported at', 'Last updated at', 'Last updated by'], rows);
   toast(`Exported ${rows.length} damage report${rows.length === 1 ? '' : 's'}`);
 });
 

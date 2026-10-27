@@ -251,20 +251,23 @@
             </div>
           </div>
 
+          <datalist id="operatorNames"></datalist>
+
           <!-- Deployments -->
           <div id="dev-deployments" class="dev-view">
             <div class="card">
               <h3 id="depFormTitle">Log a deployment</h3>
               <form id="depForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="depDate" type="date" required></label>
-                <div class="field wide"><span>Devices taken for deployment</span><div id="depCounts" class="count-grid"></div></div>
+                <label class="field"><span>Taken by (operator)</span><input id="depBy" list="operatorNames" placeholder="Name of the operator" autocomplete="off" required></label>
+                <label class="field"><span>Notes (optional)</span><input id="depNotes" placeholder="e.g. Installed on poles 4–9"></label>
+                <div class="field full"><span>Devices taken for deployment</span><div id="depCounts" class="count-grid"></div></div>
                 <label class="field wide"><span>Deployment location</span>
                   <div class="input-row">
                     <input id="depLoc" placeholder="e.g. Sector 21 substation, Jaipur" required>
                     <button id="depGps" type="button" class="btn btn-ghost btn-small">📍 Use my location</button>
                   </div>
                 </label>
-                <label class="field wide"><span>Notes (optional)</span><input id="depNotes" placeholder="e.g. Installed on poles 4–9"></label>
                 <div class="form-btns">
                   <button id="depSubmit" class="btn btn-primary" type="submit">Add deployment</button>
                   <button id="depCancel" class="btn btn-ghost" type="button" hidden>Cancel</button>
@@ -278,7 +281,7 @@
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Date</th><th>Operator</th><th>Devices</th><th>Total</th><th>Location</th><th>Notes</th><th></th></tr></thead>
+                  <thead><tr><th>Date</th><th>Taken by</th><th>Devices</th><th>Total</th><th>Location</th><th>Notes</th><th></th></tr></thead>
                   <tbody id="depBody"></tbody>
                 </table>
               </div>
@@ -291,8 +294,9 @@
               <h3 id="dmgFormTitle">Report damaged devices</h3>
               <form id="dmgForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="dmgDate" type="date" required></label>
-                <div class="field wide"><span>Devices damaged</span><div id="dmgCounts" class="count-grid"></div></div>
+                <label class="field"><span>Operator (who had the devices)</span><input id="dmgBy" list="operatorNames" placeholder="Name of the operator" autocomplete="off" required></label>
                 <label class="field"><span>Device IDs (optional)</span><input id="dmgIds" placeholder="e.g. PI-0412, PI-0419"></label>
+                <div class="field full"><span>Devices damaged</span><div id="dmgCounts" class="count-grid"></div></div>
                 <label class="field"><span>Status</span>
                   <select id="dmgStatus">
                     <option value="reported">Reported</option>
@@ -301,7 +305,7 @@
                     <option value="scrapped">Scrapped</option>
                   </select>
                 </label>
-                <label class="field full"><span>What is the issue?</span><textarea id="dmgIssue" rows="3" placeholder="e.g. Water damage, board not powering on" required></textarea></label>
+                <label class="field wide"><span>What is the issue?</span><textarea id="dmgIssue" rows="3" placeholder="e.g. Water damage, board not powering on" required></textarea></label>
                 <div class="form-btns">
                   <button id="dmgSubmit" class="btn btn-primary" type="submit">Add damage report</button>
                   <button id="dmgCancel" class="btn btn-ghost" type="button" hidden>Cancel</button>
