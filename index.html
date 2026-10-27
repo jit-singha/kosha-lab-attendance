@@ -235,6 +235,22 @@
             </div>
           </div>
 
+          <div class="card">
+            <div class="card-head">
+              <h3 id="opSumTitle">By operator</h3>
+              <button id="btnExportOps" class="btn btn-ghost btn-small">Export CSV</button>
+            </div>
+            <div class="table-wrap">
+              <table class="op-table">
+                <thead>
+                  <tr><th rowspan="2">Operator</th><th colspan="4" class="grp dep">Deployed</th><th colspan="4" class="grp dmg">Damaged</th></tr>
+                  <tr><th>03W</th><th>Pi</th><th>Cubic</th><th>Total</th><th>03W</th><th>Pi</th><th>Cubic</th><th>Total</th></tr>
+                </thead>
+                <tbody id="opSumBody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- Deployments -->
           <div id="dev-deployments" class="dev-view">
             <div class="card">

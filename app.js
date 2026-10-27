@@ -732,6 +732,8 @@ function renderDevices() {
     $(`[data-sum="${c}:total"]`).textContent = total;
   }
 
+  renderOperatorSummary(scoped);
+
   const dep = scoped.deployments.sort(byNewest);
   $('#depBody').innerHTML = dep.length ? dep.map((r) => `<tr>
       <td class="nowrap">${niceDate(r.date)}</td>
@@ -761,6 +763,46 @@ function renderDevices() {
     </tr>`;
   }).join('') : `<tr><td colspan="8" class="empty">No damage reported${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 }
+
+// Totals per operator (the person who logged the record), per device type.
+function operatorTotals(scoped) {
+  const ops = new Map();
+  const row = (r) => {
+    if (!ops.has(r.uid)) ops.set(r.uid, { uid: r.uid, name: r.name, deployments: {}, damages: {} });
+    return ops.get(r.uid);
+  };
+  for (const c of ['deployments', 'damages']) {
+    for (const r of scoped[c]) {
+      const o = row(r), counts = countsOf(r);
+      for (const t of DEVICE_TYPES) o[c][t] = (o[c][t] || 0) + (counts[t] || 0);
+    }
+  }
+  const tot = (m) => DEVICE_TYPES.reduce((s, t) => s + (m[t] || 0), 0);
+  return [...ops.values()]
+    .map((o) => ({ ...o, depTotal: tot(o.deployments), dmgTotal: tot(o.damages) }))
+    .sort((a, b) => b.depTotal - a.depTotal || b.dmgTotal - a.dmgTotal || a.name.localeCompare(b.name));
+}
+
+function renderOperatorSummary(scoped) {
+  $('#opSumTitle').textContent = $('#devAll').checked ? 'By operator — all dates' : `By operator — ${niceDate(devScopeDate())}`;
+  const ops = operatorTotals(scoped);
+  const cells = (m, total, cls) => DEVICE_TYPES.map((t) => `<td class="${cls}${m[t] ? '' : ' zero'}">${m[t] || 0}</td>`).join('') + `<td class="${cls} tot">${total}</td>`;
+  $('#opSumBody').innerHTML = ops.length ? ops.map((o) => {
+    const u = userById(o.uid) || { name: o.name, color: '#5b8cff' };
+    return `<tr><td><div class="who">${avatar(u)}<div>${esc(u.name || o.name)}</div></div></td>${cells(o.deployments, o.depTotal, 'dep')}${cells(o.damages, o.dmgTotal, 'dmg')}</tr>`;
+  }).join('') : `<tr><td colspan="9" class="empty">No records${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
+}
+
+$('#btnExportOps').addEventListener('click', () => {
+  const ops = operatorTotals({ deployments: devData.deployments.filter(inDevScope), damages: devData.damages.filter(inDevScope) });
+  const scope = $('#devAll').checked ? 'All dates' : niceDate(devScopeDate());
+  const rows = ops.map((o) => [scope, o.name,
+    ...DEVICE_TYPES.map((t) => o.deployments[t] || 0), o.depTotal,
+    ...DEVICE_TYPES.map((t) => o.damages[t] || 0), o.dmgTotal]);
+  downloadCsv(`kosha-lab-operators-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
+    ['Date', 'Operator', ...DEVICE_TYPES.map((t) => `${t} deployed`), 'Total deployed', ...DEVICE_TYPES.map((t) => `${t} damaged`), 'Total damaged'], rows);
+  toast(`Exported ${rows.length} operator${rows.length === 1 ? '' : 's'}`);
+});
 
 function showDevView(v) {
   devView = v;
