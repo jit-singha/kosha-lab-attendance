@@ -646,24 +646,50 @@ const byNewest = (a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : (b.crea
 const stamp = (ts) => (ts ? `${niceDate(dayKey(new Date(ts)))} ${hm(ts)}` : '');
 const mapsUrl = (g) => `https://www.google.com/maps?q=${g.lat},${g.lng}`;
 
-$$('.js-device-type').forEach((s) => { s.innerHTML = DEVICE_TYPES.map((t) => `<option>${t}</option>`).join(''); });
+// One record can hold a mix of device types, e.g. { '03W': 5, Pi: 12, Cubic: 3 }.
+// Older single-type records ({ type, qty }) are read the same way.
+const countsOf = (r) => r.counts || (r.type ? { [r.type]: r.qty } : {});
+const totalOf = (r) => DEVICE_TYPES.reduce((s, t) => s + (countsOf(r)[t] || 0), 0);
+const deviceChips = (r) => DEVICE_TYPES.filter((t) => countsOf(r)[t] > 0)
+  .map((t) => `<span class="pill dev">${t} × ${countsOf(r)[t]}</span>`).join(' ');
+
+function buildCounts(box) {
+  box.innerHTML = DEVICE_TYPES.map((t) => `<label class="count"><span>${t}</span><input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-type="${t}"></label>`).join('')
+    + '<div class="count-total">Total <b>0</b></div>';
+  box.addEventListener('input', () => { box.querySelector('.count-total b').textContent = readCounts(box).total; });
+}
+function readCounts(box) {
+  const counts = {};
+  let total = 0, bad = false;
+  box.querySelectorAll('input[data-type]').forEach((i) => {
+    const v = i.value.trim() === '' ? 0 : Number(i.value);
+    if (!Number.isInteger(v) || v < 0) bad = true;
+    counts[i.dataset.type] = Number.isInteger(v) && v > 0 ? v : 0;
+    total += counts[i.dataset.type];
+  });
+  return { counts, total, bad };
+}
+function fillCounts(box, counts = {}) {
+  box.querySelectorAll('input[data-type]').forEach((i) => { i.value = counts[i.dataset.type] || ''; });
+  box.querySelector('.count-total b').textContent = DEVICE_TYPES.reduce((s, t) => s + (counts[t] || 0), 0);
+}
+buildCounts($('#depCounts'));
+buildCounts($('#dmgCounts'));
 
 const DEV_FORMS = {
   deployments: {
     title: '#depFormTitle', titles: ['Log a deployment', 'Edit deployment'],
-    submit: '#depSubmit', submits: ['Add deployment', 'Save changes'], cancel: '#depCancel',
-    read: () => ({ date: $('#depDate').value, type: $('#depType').value, qty: parseInt($('#depQty').value, 10),
-      location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
-    fill: (r) => { $('#depDate').value = r.date; $('#depType').value = r.type; $('#depQty').value = r.qty; $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
-    clear: () => { $('#depForm').reset(); $('#depDate').value = devScopeDate(); depGeo = null; },
+    submit: '#depSubmit', submits: ['Add deployment', 'Save changes'], cancel: '#depCancel', counts: '#depCounts',
+    read: () => ({ date: $('#depDate').value, location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
+    fill: (r) => { $('#depDate').value = r.date; fillCounts($('#depCounts'), countsOf(r)); $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
+    clear: () => { $('#depForm').reset(); fillCounts($('#depCounts')); $('#depDate').value = devScopeDate(); depGeo = null; },
   },
   damages: {
     title: '#dmgFormTitle', titles: ['Report damaged devices', 'Edit damage report'],
-    submit: '#dmgSubmit', submits: ['Add damage report', 'Save changes'], cancel: '#dmgCancel',
-    read: () => ({ date: $('#dmgDate').value, type: $('#dmgType').value, qty: parseInt($('#dmgQty').value, 10),
-      ids: $('#dmgIds').value.trim(), issue: $('#dmgIssue').value.trim(), status: $('#dmgStatus').value }),
-    fill: (r) => { $('#dmgDate').value = r.date; $('#dmgType').value = r.type; $('#dmgQty').value = r.qty; $('#dmgIds').value = r.ids || ''; $('#dmgIssue').value = r.issue; $('#dmgStatus').value = r.status || 'reported'; },
-    clear: () => { $('#dmgForm').reset(); $('#dmgDate').value = devScopeDate(); },
+    submit: '#dmgSubmit', submits: ['Add damage report', 'Save changes'], cancel: '#dmgCancel', counts: '#dmgCounts',
+    read: () => ({ date: $('#dmgDate').value, ids: $('#dmgIds').value.trim(), issue: $('#dmgIssue').value.trim(), status: $('#dmgStatus').value }),
+    fill: (r) => { $('#dmgDate').value = r.date; fillCounts($('#dmgCounts'), countsOf(r)); $('#dmgIds').value = r.ids || ''; $('#dmgIssue').value = r.issue; $('#dmgStatus').value = r.status || 'reported'; },
+    clear: () => { $('#dmgForm').reset(); fillCounts($('#dmgCounts')); $('#dmgDate').value = devScopeDate(); },
   },
 };
 
@@ -699,7 +725,7 @@ function renderDevices() {
   for (const c of ['deployments', 'damages']) {
     let total = 0;
     for (const t of DEVICE_TYPES) {
-      const n = scoped[c].filter((r) => r.type === t).reduce((s, r) => s + (r.qty || 0), 0);
+      const n = scoped[c].reduce((s, r) => s + (countsOf(r)[t] || 0), 0);
       total += n;
       $(`[data-sum="${c}:${t}"]`).textContent = n;
     }
@@ -710,8 +736,8 @@ function renderDevices() {
   $('#depBody').innerHTML = dep.length ? dep.map((r) => `<tr>
       <td class="nowrap">${niceDate(r.date)}</td>
       <td>${operatorCell(r)}</td>
-      <td><span class="pill dev">${esc(r.type)}</span></td>
-      <td class="mono">${r.qty}</td>
+      <td class="chips">${deviceChips(r)}</td>
+      <td class="mono">${totalOf(r)}</td>
       <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">📍 ${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
       <td class="reason">${esc(r.notes || '')}</td>
       <td class="actions">${recActions('deployments', r)}</td>
@@ -726,8 +752,8 @@ function renderDevices() {
     return `<tr>
       <td class="nowrap">${niceDate(r.date)}</td>
       <td>${operatorCell(r)}</td>
-      <td><span class="pill dev">${esc(r.type)}</span></td>
-      <td class="mono">${r.qty}</td>
+      <td class="chips">${deviceChips(r)}</td>
+      <td class="mono">${totalOf(r)}</td>
       <td class="mono small-cell">${esc(r.ids || '—')}</td>
       <td class="reason">${esc(r.issue)}</td>
       <td>${status}</td>
@@ -743,9 +769,11 @@ function showDevView(v) {
 }
 
 async function saveDevRecord(c) {
-  const data = DEV_FORMS[c].read();
+  const { counts, total, bad } = readCounts($(DEV_FORMS[c].counts));
+  if (bad) return toast('Device numbers must be whole numbers (0 or more).');
+  if (!total) return toast('Enter how many 03W, Pi or Cubic devices — at least one.');
+  const data = { ...DEV_FORMS[c].read(), counts, qty: total };
   if (!data.date) return toast('Please pick a date.');
-  if (!Number.isInteger(data.qty) || data.qty < 1) return toast('Number of devices must be 1 or more.');
   const id = devEditing[c];
   const ok = await guard(async () => {
     if (id) await store.updateRecord(c, id, { ...data, updatedAt: Date.now(), updatedBy: me.uid, updatedByName: me.name });
@@ -819,19 +847,21 @@ $('#dmgBody').addEventListener('change', async (e) => {
 
 $('#btnExportDep').addEventListener('click', () => {
   const rows = devData.deployments.filter(inDevScope).sort(byNewest).map((r) => [
-    niceDate(r.date), r.name, r.type, r.qty, r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
+    niceDate(r.date), r.name, ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
+    r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
     r.notes, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-deployments-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Operator', 'Device', 'Number of devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged at', 'Last edited at', 'Last edited by'], rows);
+    ['Date', 'Operator', ...DEVICE_TYPES, 'Total devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged at', 'Last edited at', 'Last edited by'], rows);
   toast(`Exported ${rows.length} deployment record${rows.length === 1 ? '' : 's'}`);
 });
 
 $('#btnExportDmg').addEventListener('click', () => {
   const rows = devData.damages.filter(inDevScope).sort(byNewest).map((r) => [
-    niceDate(r.date), r.name, r.type, r.qty, r.ids, r.issue, (DAMAGE_STATUS[r.status] || DAMAGE_STATUS.reported)[1],
+    niceDate(r.date), r.name, ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
+    r.ids, r.issue, (DAMAGE_STATUS[r.status] || DAMAGE_STATUS.reported)[1],
     stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-damage-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Operator', 'Device', 'Number damaged', 'Device IDs', 'Issue', 'Status', 'Reported at', 'Last updated at', 'Last updated by'], rows);
+    ['Date', 'Operator', ...DEVICE_TYPES.map((t) => `${t} damaged`), 'Total damaged', 'Device IDs', 'Issue', 'Status', 'Reported at', 'Last updated at', 'Last updated by'], rows);
   toast(`Exported ${rows.length} damage report${rows.length === 1 ? '' : 's'}`);
 });
 

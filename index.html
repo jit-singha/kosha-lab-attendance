@@ -241,8 +241,7 @@
               <h3 id="depFormTitle">Log a deployment</h3>
               <form id="depForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="depDate" type="date" required></label>
-                <label class="field"><span>Device</span><select id="depType" class="js-device-type"></select></label>
-                <label class="field"><span>Number of devices</span><input id="depQty" type="number" min="1" step="1" placeholder="e.g. 12" required></label>
+                <div class="field wide"><span>Devices taken for deployment</span><div id="depCounts" class="count-grid"></div></div>
                 <label class="field wide"><span>Deployment location</span>
                   <div class="input-row">
                     <input id="depLoc" placeholder="e.g. Sector 21 substation, Jaipur" required>
@@ -263,7 +262,7 @@
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Date</th><th>Operator</th><th>Device</th><th>Qty</th><th>Location</th><th>Notes</th><th></th></tr></thead>
+                  <thead><tr><th>Date</th><th>Operator</th><th>Devices</th><th>Total</th><th>Location</th><th>Notes</th><th></th></tr></thead>
                   <tbody id="depBody"></tbody>
                 </table>
               </div>
@@ -276,8 +275,7 @@
               <h3 id="dmgFormTitle">Report damaged devices</h3>
               <form id="dmgForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="dmgDate" type="date" required></label>
-                <label class="field"><span>Device</span><select id="dmgType" class="js-device-type"></select></label>
-                <label class="field"><span>Number damaged</span><input id="dmgQty" type="number" min="1" step="1" placeholder="e.g. 2" required></label>
+                <div class="field wide"><span>Devices damaged</span><div id="dmgCounts" class="count-grid"></div></div>
                 <label class="field"><span>Device IDs (optional)</span><input id="dmgIds" placeholder="e.g. PI-0412, PI-0419"></label>
                 <label class="field"><span>Status</span>
                   <select id="dmgStatus">
@@ -301,7 +299,7 @@
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Date</th><th>Operator</th><th>Device</th><th>Qty</th><th>Device IDs</th><th>Issue</th><th>Status</th><th></th></tr></thead>
+                  <thead><tr><th>Date</th><th>Operator</th><th>Devices</th><th>Total</th><th>Device IDs</th><th>Issue</th><th>Status</th><th></th></tr></thead>
                   <tbody id="dmgBody"></tbody>
                 </table>
               </div>
