@@ -92,6 +92,11 @@ function localStore() {
     async addLaptop(rec) { const id = uid(); s.laptops[id] = { ...rec, id }; write(); },
     async listLaptops(forUid) { return Object.values(s.laptops).filter((r) => !forUid || r.uid === forUid); },
     async updateLaptop(id, patch) { Object.assign(s.laptops[id], patch); write(); },
+    // Generic records (device deployments, damage reports).
+    async listRecords(c) { return Object.values(s[c] || {}); },
+    async addRecord(c, rec) { const id = uid(); s[c] = { ...s[c], [id]: { ...rec, id } }; write(); },
+    async updateRecord(c, id, patch) { Object.assign(s[c][id], patch); write(); },
+    async deleteRecord(c, id) { delete s[c][id]; write(); },
   };
 }
 
@@ -165,5 +170,10 @@ async function firebaseStore() {
     async addLaptop(rec) { await F.addDoc(col('laptops'), rec); },
     async listLaptops(forUid) { return all(forUid ? F.query(col('laptops'), F.where('uid', '==', forUid)) : col('laptops')); },
     async updateLaptop(id, patch) { await F.updateDoc(ref('laptops', id), patch); },
+    // Generic records (device deployments, damage reports).
+    async listRecords(c) { return all(col(c)); },
+    async addRecord(c, rec) { await F.addDoc(col(c), rec); },
+    async updateRecord(c, id, patch) { await F.updateDoc(ref(c, id), patch); },
+    async deleteRecord(c, id) { await F.deleteDoc(ref(c, id)); },
   };
 }

@@ -9,6 +9,8 @@ service cloud.firestore {
     function myDoc() { return /databases/$(db)/documents/users/$(request.auth.uid); }
     function isMember() { return signedIn() && exists(myDoc()); }
     function isAdmin() { return isOwner() || (isMember() && get(myDoc()).data.role == 'admin'); }
+    function isOperator() { return isAdmin() || (isMember() && get(myDoc()).data.role == 'operator'); }
+    function validDevice(d) { return d.uid == request.auth.uid && d.qty is int && d.qty > 0 && d.type in ['03W', 'Pi', 'Cubic']; }
     function nearNow(ts) { return ts is int && ts > request.time.toMillis() - 300000 && ts < request.time.toMillis() + 300000; }
 
     // Profiles. People can create their own profile only as a "member";
@@ -52,6 +54,21 @@ service cloud.firestore {
       allow create: if isMember() && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
+    }
+
+    // Device deployments and damage reports: operators and admins see all of them;
+    // operators add their own and can edit or delete only their own; admins can change any.
+    match /deployments/{id} {
+      allow read: if isOperator();
+      allow create: if isOperator() && validDevice(request.resource.data);
+      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data));
+      allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);
+    }
+    match /damages/{id} {
+      allow read: if isOperator();
+      allow create: if isOperator() && validDevice(request.resource.data);
+      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data));
+      allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);
     }
   }
 }

@@ -10,6 +10,8 @@ Made by **Jit Singh**.
 - **Late login detection**: configurable shift start time and grace period; shows how many minutes late.
 - **Precise location capture**: GPS is required to check in. The app samples GPS until it gets an accurate fix, then records the full street address, exact coordinates (6 decimals) and accuracy in metres. Each entry opens on an embedded map with a pin, or in Google Maps.
 - **Laptop take-home log**: members request to take a laptop home (asset ID, dates, reason). Admins approve or reject, then mark it returned. Laptops not back by the return date show as **Overdue**.
+- **Roles**: Member, Operator or Admin, chosen per person in **Team & Access**.
+- **Devices (operators and admins)**: operators log daily device deployments (date, device type 03W / Pi / Cubic, number of devices, deployment location with optional GPS pin, notes) and damage reports (number damaged, device IDs, the issue, and a status: Reported / Under repair / Repaired / Scrapped). Daily or all-time summary by device type, edit and delete own records (admins can edit any), and CSV export for both.
 - **Dashboard (admins)**: on-time / late / absent per day, attendance log with locations, all-time late leaderboard, CSV export.
 - **My Attendance (members)**: personal history, late count and average check-in time.
 

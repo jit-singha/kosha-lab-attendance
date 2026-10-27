@@ -7,7 +7,8 @@ const PAGES = {
   history: ['My Attendance', 'Your check-in history, late arrivals and locations.'],
   dashboard: ['Dashboard', 'Daily overview of attendance, late arrivals and locations.'],
   laptops: ['Laptops', 'Requests to take company laptops home, approvals and returns.'],
-  members: ['Team & Access', 'Add members and choose who has admin access.'],
+  devices: ['Devices', 'Daily device deployments, where they went, and damage reports.'],
+  members: ['Team & Access', 'Add members and choose their access: member, operator or admin.'],
   settings: ['Settings', 'Configure shift timings and manage data.'],
 };
 
@@ -50,6 +51,10 @@ const isOwner = (u) => !!OWNER_EMAIL && u?.email === OWNER_EMAIL.toLowerCase();
 
 let store, me = null, settings = { start: '09:30', grace: 10 }, users = [];
 const isAdmin = () => me?.role === 'admin';
+const isOperator = () => me?.role === 'admin' || me?.role === 'operator';
+const ROLE_LABEL = { admin: 'Admin', operator: 'Operator', member: 'Member' };
+const ROLE_RANK = { admin: 0, operator: 1, member: 2 };
+const roleLabel = (u) => (isOwner(u) ? 'Owner' : ROLE_LABEL[u.role] || 'Member');
 const userById = (id) => users.find((u) => u.uid === id);
 const lateCutoff = () => toMin(settings.start) + Number(settings.grace || 0);
 
@@ -103,12 +108,12 @@ const GEO_ERRORS = {
   3: 'Could not get a GPS fix in time. Move near a window or outdoors and try again.',
 };
 
-async function locate() {
+async function locate(onStatus = setStatus) {
   if (!window.isSecureContext) throw new Error('Precise location needs HTTPS. Open the app from its https:// link.');
   try {
-    const p = await getPrecisePosition((acc) => setStatus(`Getting precise location… current accuracy ±${acc} m`));
+    const p = await getPrecisePosition((acc) => onStatus(`Getting precise location… current accuracy ±${acc} m`));
     const { latitude: lat, longitude: lng, accuracy } = p.coords;
-    setStatus('Resolving address…');
+    onStatus('Resolving address…');
     const place = await reverseGeocode(lat, lng);
     return { lat, lng, acc: Math.round(accuracy), place, source: 'gps', precise: accuracy <= PRECISE_LIMIT };
   } catch (e) {
@@ -248,12 +253,12 @@ async function renderDashboard() {
 }
 
 function renderMembers() {
-  const sorted = [...users].sort((a, b) => (b.role === 'admin') - (a.role === 'admin') || a.name.localeCompare(b.name));
+  const sorted = [...users].sort((a, b) => (ROLE_RANK[a.role] ?? 2) - (ROLE_RANK[b.role] ?? 2) || a.name.localeCompare(b.name));
   $('#memberList').innerHTML = sorted.map((u) => {
     const self = u.uid === me.uid, owner = isOwner(u);
-    const roleBtn = owner || self ? '' : u.role === 'admin'
-      ? `<button class="btn btn-ghost btn-xs" data-role="${u.uid}" data-to="member">Remove admin</button>`
-      : `<button class="btn btn-ghost btn-xs" data-role="${u.uid}" data-to="admin">Make admin</button>`;
+    const roleBtn = owner || self ? '' : `<select class="small-select role-select" data-role-select="${u.uid}" title="Change access">
+        ${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}"${(u.role || 'member') === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>`;
     const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member">✕</button>`;
     return `<div class="card member">
       <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">📷</span></button>
@@ -261,7 +266,7 @@ function renderMembers() {
         <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
         <small>${esc(u.email)}</small>
         <small>${esc([u.dept, u.empId].filter(Boolean).join(' · ') || 'Team member')}</small>
-        <div class="member-actions"><span class="pill ${u.role === 'admin' ? 'admin' : 'member'}">${owner ? 'Owner' : u.role === 'admin' ? 'Admin' : 'Member'}</span>${roleBtn}</div>
+        <div class="member-actions"><span class="pill ${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}</div>
       </div>
       ${delBtn}
     </div>`;
@@ -343,7 +348,7 @@ function showTab(tab) {
   $$('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + tab));
   const [t, s] = PAGES[tab];
   $('#pageTitle').textContent = t; $('#pageSub').textContent = s;
-  ({ punch: renderRecent, history: renderHistory, dashboard: renderDashboard, laptops: renderLaptops, members: renderMembers }[tab] || (() => {}))();
+  ({ punch: renderRecent, history: renderHistory, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers }[tab] || (() => {}))();
 }
 
 async function loadShared() {
@@ -457,10 +462,11 @@ async function enterApp(profile) {
   $('#appShell').hidden = false;
   $('#demoBanner').hidden = store.mode !== 'demo';
   renderMe();
-  $('#meRole').textContent = isOwner(me) ? 'Owner' : isAdmin() ? 'Admin' : 'Member';
-  $('#meRole').className = 'pill ' + (isAdmin() ? 'admin' : 'member');
+  $('#meRole').textContent = roleLabel(me);
+  $('#meRole').className = 'pill ' + (me.role || 'member');
   $('#helloName').textContent = me.name.split(' ')[0];
   $$('[data-admin-only]').forEach((el) => { el.hidden = !isAdmin(); });
+  $$('[data-operator-only]').forEach((el) => { el.hidden = !isOperator(); });
   $$('[data-member-only]').forEach((el) => { el.hidden = isAdmin(); });
   await loadShared();
   const allowed = [...$$('.nav-item')].filter((n) => !n.hidden).map((n) => n.dataset.tab);
@@ -480,9 +486,9 @@ function showAuth() {
 
 // ---------- Events ----------
 let authMode = 'signin';
-$$('.seg-btn').forEach((b) => b.addEventListener('click', () => {
+$$('.seg-btn[data-auth]').forEach((b) => b.addEventListener('click', () => {
   authMode = b.dataset.auth;
-  $$('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
+  $$('.seg-btn[data-auth]').forEach((x) => x.classList.toggle('active', x === b));
   $('.signup-only').hidden = authMode !== 'signup';
   $('#aName').required = authMode === 'signup';
   $('#aPass').autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
@@ -564,22 +570,29 @@ $('#memberForm').addEventListener('submit', async (e) => {
 $('#memberList').addEventListener('click', async (e) => {
   const photoBtn = e.target.closest('[data-photo]');
   if (photoBtn) return pickPhoto(photoBtn.dataset.photo);
-  const roleBtn = e.target.closest('[data-role]');
   const delBtn = e.target.closest('[data-del]');
-  if (roleBtn) {
-    const u = userById(roleBtn.dataset.role), to = roleBtn.dataset.to;
-    const q = to === 'admin' ? `Give admin access to ${u.name}? They will be able to see everyone's attendance and manage the team.` : `Remove admin access from ${u.name}?`;
-    if (!confirm(q)) return;
-    if (await guard(async () => { await store.updateUser(u.uid, { role: to }); return true; })) {
-      u.role = to; renderMembers(); toast(to === 'admin' ? `${u.name} is now an admin` : `${u.name} is now a member`);
-    }
-  } else if (delBtn) {
+  if (delBtn) {
     const u = userById(delBtn.dataset.del);
     if (!confirm(`Remove ${u.name} from Kosha Lab? They will no longer be able to use the app.`)) return;
     if (await guard(async () => { await store.removeUser(u.uid); return true; })) {
       users = users.filter((x) => x.uid !== u.uid); renderMembers(); toast(`${u.name} removed`);
     }
   }
+});
+
+const ROLE_CONFIRM = {
+  admin: (n) => `Give admin access to ${n}? They will see everyone's attendance, devices and laptops, and can manage the team.`,
+  operator: (n) => `Make ${n} an operator? They will be able to log device deployments and damage reports.`,
+  member: (n) => `Make ${n} a regular member? They will lose any admin or operator access.`,
+};
+$('#memberList').addEventListener('change', async (e) => {
+  const sel = e.target.closest('[data-role-select]');
+  if (!sel) return;
+  const u = userById(sel.dataset.roleSelect), to = sel.value;
+  if (!confirm(ROLE_CONFIRM[to](u.name))) { sel.value = u.role || 'member'; return; }
+  if (await guard(async () => { await store.updateUser(u.uid, { role: to }); return true; })) {
+    u.role = to; renderMembers(); toast(`${u.name} is now ${to === 'admin' || to === 'operator' ? 'an' : 'a'} ${ROLE_LABEL[to].toLowerCase()}`);
+  } else sel.value = u.role || 'member';
 });
 
 // Laptops
@@ -614,6 +627,217 @@ $('#lpBody').addEventListener('click', async (e) => {
     toast({ approve: 'Request approved', reject: 'Request rejected', return: 'Marked as returned' }[act]);
   }
 });
+
+// ---------- Devices (operators + admins) ----------
+const DEVICE_TYPES = ['03W', 'Pi', 'Cubic'];
+const DAMAGE_STATUS = {
+  reported: ['late', 'Reported'], repair: ['absent', 'Under repair'],
+  repaired: ['ontime', 'Repaired'], scrapped: ['muted-pill', 'Scrapped'],
+};
+const devData = { deployments: [], damages: [] };
+const devEditing = { deployments: null, damages: null };
+let devView = 'deployments';
+let depGeo = null; // GPS fix attached to the deployment being entered
+
+const canEditRec = (r) => isAdmin() || r.uid === me.uid;
+const devScopeDate = () => $('#devDate').value || dayKey();
+const inDevScope = (r) => $('#devAll').checked || r.date === devScopeDate();
+const byNewest = (a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));
+const stamp = (ts) => (ts ? `${niceDate(dayKey(new Date(ts)))} ${hm(ts)}` : '');
+const mapsUrl = (g) => `https://www.google.com/maps?q=${g.lat},${g.lng}`;
+
+$$('.js-device-type').forEach((s) => { s.innerHTML = DEVICE_TYPES.map((t) => `<option>${t}</option>`).join(''); });
+
+const DEV_FORMS = {
+  deployments: {
+    title: '#depFormTitle', titles: ['Log a deployment', 'Edit deployment'],
+    submit: '#depSubmit', submits: ['Add deployment', 'Save changes'], cancel: '#depCancel',
+    read: () => ({ date: $('#depDate').value, type: $('#depType').value, qty: parseInt($('#depQty').value, 10),
+      location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
+    fill: (r) => { $('#depDate').value = r.date; $('#depType').value = r.type; $('#depQty').value = r.qty; $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
+    clear: () => { $('#depForm').reset(); $('#depDate').value = devScopeDate(); depGeo = null; },
+  },
+  damages: {
+    title: '#dmgFormTitle', titles: ['Report damaged devices', 'Edit damage report'],
+    submit: '#dmgSubmit', submits: ['Add damage report', 'Save changes'], cancel: '#dmgCancel',
+    read: () => ({ date: $('#dmgDate').value, type: $('#dmgType').value, qty: parseInt($('#dmgQty').value, 10),
+      ids: $('#dmgIds').value.trim(), issue: $('#dmgIssue').value.trim(), status: $('#dmgStatus').value }),
+    fill: (r) => { $('#dmgDate').value = r.date; $('#dmgType').value = r.type; $('#dmgQty').value = r.qty; $('#dmgIds').value = r.ids || ''; $('#dmgIssue').value = r.issue; $('#dmgStatus').value = r.status || 'reported'; },
+    clear: () => { $('#dmgForm').reset(); $('#dmgDate').value = devScopeDate(); },
+  },
+};
+
+function setDevEditing(c, rec) {
+  const f = DEV_FORMS[c];
+  devEditing[c] = rec?.id || null;
+  rec ? f.fill(rec) : f.clear();
+  $(f.title).textContent = f.titles[rec ? 1 : 0];
+  $(f.submit).textContent = f.submits[rec ? 1 : 0];
+  $(f.cancel).hidden = !rec;
+  if (rec) $(f.title).scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function loadDevices() {
+  const [dep, dmg] = await Promise.all([guard(() => store.listRecords('deployments')), guard(() => store.listRecords('damages'))]);
+  devData.deployments = dep || [];
+  devData.damages = dmg || [];
+  renderDevices();
+}
+
+function operatorCell(r) {
+  const u = userById(r.uid) || { name: r.name, color: '#5b8cff' };
+  return `<div class="who">${avatar(u)}<div>${esc(u.name || r.name)}${r.updatedByName && r.updatedByName !== r.name ? `<small>edited by ${esc(r.updatedByName)}</small>` : ''}</div></div>`;
+}
+
+const recActions = (c, r) => (canEditRec(r)
+  ? `<button class="btn btn-xs btn-ghost" data-dev-edit="${c}:${r.id}">Edit</button><button class="del" data-dev-del="${c}:${r.id}" title="Delete">✕</button>`
+  : '');
+
+function renderDevices() {
+  const scoped = { deployments: devData.deployments.filter(inDevScope), damages: devData.damages.filter(inDevScope) };
+  $('#sumTitle').textContent = $('#devAll').checked ? 'Summary — all dates' : `Summary — ${niceDate(devScopeDate())}`;
+  for (const c of ['deployments', 'damages']) {
+    let total = 0;
+    for (const t of DEVICE_TYPES) {
+      const n = scoped[c].filter((r) => r.type === t).reduce((s, r) => s + (r.qty || 0), 0);
+      total += n;
+      $(`[data-sum="${c}:${t}"]`).textContent = n;
+    }
+    $(`[data-sum="${c}:total"]`).textContent = total;
+  }
+
+  const dep = scoped.deployments.sort(byNewest);
+  $('#depBody').innerHTML = dep.length ? dep.map((r) => `<tr>
+      <td class="nowrap">${niceDate(r.date)}</td>
+      <td>${operatorCell(r)}</td>
+      <td><span class="pill dev">${esc(r.type)}</span></td>
+      <td class="mono">${r.qty}</td>
+      <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">📍 ${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
+      <td class="reason">${esc(r.notes || '')}</td>
+      <td class="actions">${recActions('deployments', r)}</td>
+    </tr>`).join('') : `<tr><td colspan="7" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
+
+  const dmg = scoped.damages.sort(byNewest);
+  $('#dmgBody').innerHTML = dmg.length ? dmg.map((r) => {
+    const [cls, label] = DAMAGE_STATUS[r.status] || DAMAGE_STATUS.reported;
+    const status = canEditRec(r)
+      ? `<select class="small-select status-select st-${r.status || 'reported'}" data-dmg-status="${r.id}">${Object.entries(DAMAGE_STATUS).map(([v, [, l]]) => `<option value="${v}"${(r.status || 'reported') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`
+      : `<span class="pill ${cls}">${label}</span>`;
+    return `<tr>
+      <td class="nowrap">${niceDate(r.date)}</td>
+      <td>${operatorCell(r)}</td>
+      <td><span class="pill dev">${esc(r.type)}</span></td>
+      <td class="mono">${r.qty}</td>
+      <td class="mono small-cell">${esc(r.ids || '—')}</td>
+      <td class="reason">${esc(r.issue)}</td>
+      <td>${status}</td>
+      <td class="actions">${recActions('damages', r)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty">No damage reported${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
+}
+
+function showDevView(v) {
+  devView = v;
+  $$('.seg-btn[data-dev]').forEach((b) => b.classList.toggle('active', b.dataset.dev === v));
+  $$('.dev-view').forEach((el) => { el.hidden = el.id !== 'dev-' + v; });
+}
+
+async function saveDevRecord(c) {
+  const data = DEV_FORMS[c].read();
+  if (!data.date) return toast('Please pick a date.');
+  if (!Number.isInteger(data.qty) || data.qty < 1) return toast('Number of devices must be 1 or more.');
+  const id = devEditing[c];
+  const ok = await guard(async () => {
+    if (id) await store.updateRecord(c, id, { ...data, updatedAt: Date.now(), updatedBy: me.uid, updatedByName: me.name });
+    else await store.addRecord(c, { ...data, uid: me.uid, name: me.name, createdAt: Date.now() });
+    return true;
+  });
+  if (!ok) return;
+  toast(id ? 'Changes saved' : c === 'deployments' ? 'Deployment logged' : 'Damage report added');
+  setDevEditing(c, null);
+  await loadDevices();
+}
+
+$$('.seg-btn[data-dev]').forEach((b) => b.addEventListener('click', () => showDevView(b.dataset.dev)));
+$('#devDate').addEventListener('change', () => {
+  // New entries default to the date being viewed; half-filled forms keep their other fields.
+  if (!devEditing.deployments) $('#depDate').value = devScopeDate();
+  if (!devEditing.damages) $('#dmgDate').value = devScopeDate();
+  renderDevices();
+});
+$('#devAll').addEventListener('change', renderDevices);
+$('#depForm').addEventListener('submit', (e) => { e.preventDefault(); saveDevRecord('deployments'); });
+$('#dmgForm').addEventListener('submit', (e) => { e.preventDefault(); saveDevRecord('damages'); });
+$('#depCancel').addEventListener('click', () => setDevEditing('deployments', null));
+$('#dmgCancel').addEventListener('click', () => setDevEditing('damages', null));
+$('#depLoc').addEventListener('input', () => { depGeo = null; }); // typed location replaces any GPS fix
+
+$('#depGps').addEventListener('click', async () => {
+  const btn = $('#depGps'), label = btn.textContent;
+  btn.disabled = true;
+  try {
+    const loc = await locate((msg) => { btn.textContent = msg.replace('Getting precise location… current accuracy', 'GPS'); });
+    depGeo = { lat: loc.lat, lng: loc.lng, acc: loc.acc };
+    $('#depLoc').value = loc.place || coords(loc);
+    toast(`Location captured (±${loc.acc} m)`);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+$('#tab-devices').addEventListener('click', async (e) => {
+  const ed = e.target.closest('[data-dev-edit]'), del = e.target.closest('[data-dev-del]');
+  if (ed) {
+    const [c, id] = ed.dataset.devEdit.split(':');
+    showDevView(c);
+    setDevEditing(c, devData[c].find((r) => r.id === id));
+  } else if (del) {
+    const [c, id] = del.dataset.devDel.split(':');
+    if (!confirm(c === 'deployments' ? 'Delete this deployment record?' : 'Delete this damage report?')) return;
+    if (await guard(async () => { await store.deleteRecord(c, id); return true; })) {
+      if (devEditing[c] === id) setDevEditing(c, null);
+      toast('Record deleted');
+      loadDevices();
+    }
+  }
+});
+
+$('#dmgBody').addEventListener('change', async (e) => {
+  const sel = e.target.closest('[data-dmg-status]');
+  if (!sel) return;
+  const r = devData.damages.find((x) => x.id === sel.dataset.dmgStatus);
+  const status = sel.value;
+  if (await guard(async () => { await store.updateRecord('damages', r.id, { status, updatedAt: Date.now(), updatedBy: me.uid, updatedByName: me.name }); return true; })) {
+    Object.assign(r, { status, updatedAt: Date.now(), updatedByName: me.name });
+    toast(`Status set to ${DAMAGE_STATUS[status][1]}`);
+    renderDevices();
+  } else sel.value = r.status || 'reported';
+});
+
+$('#btnExportDep').addEventListener('click', () => {
+  const rows = devData.deployments.filter(inDevScope).sort(byNewest).map((r) => [
+    niceDate(r.date), r.name, r.type, r.qty, r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
+    r.notes, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
+  downloadCsv(`kosha-lab-deployments-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
+    ['Date', 'Operator', 'Device', 'Number of devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged at', 'Last edited at', 'Last edited by'], rows);
+  toast(`Exported ${rows.length} deployment record${rows.length === 1 ? '' : 's'}`);
+});
+
+$('#btnExportDmg').addEventListener('click', () => {
+  const rows = devData.damages.filter(inDevScope).sort(byNewest).map((r) => [
+    niceDate(r.date), r.name, r.type, r.qty, r.ids, r.issue, (DAMAGE_STATUS[r.status] || DAMAGE_STATUS.reported)[1],
+    stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
+  downloadCsv(`kosha-lab-damage-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
+    ['Date', 'Operator', 'Device', 'Number damaged', 'Device IDs', 'Issue', 'Status', 'Reported at', 'Last updated at', 'Last updated by'], rows);
+  toast(`Exported ${rows.length} damage report${rows.length === 1 ? '' : 's'}`);
+});
+
+$('#devDate').value = dayKey();
+DEV_FORMS.deployments.clear();
+DEV_FORMS.damages.clear();
 
 // Settings
 $('#btnSave').addEventListener('click', async () => {
