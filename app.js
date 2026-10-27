@@ -145,15 +145,26 @@ async function locate(onStatus = setStatus) {
 // ---------- Check in / out ----------
 const setStatus = (msg, cls = '') => { const s = $('#punchStatus'); s.className = 'status-box ' + cls; s.innerHTML = msg; };
 
+const OPEN_SHIFT_MS = 20 * 3600 * 1000; // a check-in older than this no longer counts as the current shift
+
 async function punch(kind) {
-  const shift = shiftOf(me);
-  const today = shiftTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
-  const id = `${me.uid}_${today}`;
-  let existing;
-  try { existing = await store.getAttendance(id); } catch (e) { return setStatus(esc(e.message), 'err'); }
-  if (kind === 'in' && existing) return setStatus(`You already checked in today at <b>${hm(existing.inTs)}</b>.`, 'err');
-  if (kind === 'out' && !existing) return setStatus("You haven't checked in today.", 'err');
-  if (kind === 'out' && existing.outTs) return setStatus(`You already checked out at <b>${hm(existing.outTs)}</b>.`, 'err');
+  let shift = shiftOf(me);
+  let id, existing;
+  try {
+    if (kind === 'in') {
+      const date = shiftTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
+      id = `${me.uid}_${date}`;
+      existing = await store.getAttendance(id);
+      if (existing) return setStatus(`You already checked in for this ${SHIFT_LABEL[existing.shift || shift]} shift at <b>${hm(existing.inTs)}</b>.`, 'err');
+    } else {
+      // Check out of the most recent shift, whichever shift and date it was recorded on.
+      existing = (await myRecords()).find((r) => Date.now() - r.inTs < OPEN_SHIFT_MS);
+      if (!existing) return setStatus("You haven't checked in for a shift yet.", 'err');
+      if (existing.outTs) return setStatus(`You already checked out at <b>${hm(existing.outTs)}</b>.`, 'err');
+      id = existing.id;
+      shift = existing.shift || shift;
+    }
+  } catch (e) { return setStatus(esc(e.message), 'err'); }
 
   $('#btnIn').disabled = $('#btnOut').disabled = true;
   setStatus('Getting precise location…');
@@ -161,8 +172,8 @@ async function punch(kind) {
     const loc = await locate();
     const now = Date.now();
     if (kind === 'in') {
-      const { late, lateBy } = shiftTiming(now, shift);
-      await store.saveAttendance({ id, uid: me.uid, name: me.name, date: today, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc });
+      const { late, lateBy, date } = shiftTiming(now, shift);
+      await store.saveAttendance({ id, uid: me.uid, name: me.name, date, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc });
       const where = ` from <b>${esc(loc.place || coords(loc))}</b> <span class="muted">(${coords(loc)}, ±${loc.acc} m)</span>`;
       setStatus(late
         ? `Checked in at <b>${hm(now)}</b>${where} — <b>late by ${fmtLate(lateBy)}</b>.`
@@ -211,6 +222,7 @@ const closeMap = () => { $('#mapModal').classList.remove('open'); $('#mapFrame')
 // ---------- Renderers ----------
 function renderPolicy() {
   const s = shiftOf(me);
+  $$('.seg-btn[data-shift]').forEach((b) => b.classList.toggle('active', b.dataset.shift === s));
   $('#myShiftLabel').textContent = `${SHIFT_LABEL[s]} shift`;
   $('#shiftLabel').textContent = shiftStart(s);
   $('#graceLabel').textContent = settings.grace;
@@ -513,6 +525,7 @@ async function enterApp(profile) {
   $('#meRole').textContent = roleLabel(me);
   $('#meRole').className = 'pill role-' + (me.role || 'member');
   $('#helloName').textContent = me.name.split(' ')[0];
+  setStatus('Ready when you are.'); // don't show the previous person's message on a shared device
   $$('[data-admin-only]').forEach((el) => { el.hidden = !isAdmin(); });
   $$('[data-devices-nav]').forEach((el) => { el.hidden = !canSeeDevices(); });
   $$('[data-logger-only]').forEach((el) => { el.hidden = !isOperator(); });
@@ -558,6 +571,18 @@ $('#authForm').addEventListener('submit', async (e) => {
 
 $$('.js-signout').forEach((b) => b.addEventListener('click', () => { $('#aPass').value = ''; store.signOut(); }));
 $$('.nav-item').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+// Members pick the shift they're working; it's saved on their profile so it stays selected next time.
+$$('.seg-btn[data-shift]').forEach((b) => b.addEventListener('click', async () => {
+  const to = b.dataset.shift;
+  if (to === shiftOf(me)) return;
+  if (await guard(async () => { await store.updateUser(me.uid, { shift: to }); return true; })) {
+    me.shift = to;
+    const u = userById(me.uid);
+    if (u) u.shift = to;
+    renderPolicy();
+    setStatus(`You're on the <b>${SHIFT_LABEL[to]} shift</b> — starts ${shiftStart(to)}, late after ${fmtMin(lateCutoff(to))}.`);
+  }
+}));
 $('#btnIn').addEventListener('click', () => punch('in'));
 $('#btnOut').addEventListener('click', () => punch('out'));
 $('#dashDate').addEventListener('change', renderDashboard);
