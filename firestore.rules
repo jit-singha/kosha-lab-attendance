@@ -10,8 +10,8 @@ service cloud.firestore {
     function isMember() { return signedIn() && exists(myDoc()); }
     function me() { return get(myDoc()).data; }
     function isAdmin() { return isOwner() || (isMember() && me().role == 'admin'); }
-    // Operators are part of Operations; they (and admins) log devices. The IT department can view devices.
-    function isOperator() { return isAdmin() || (isMember() && me().role == 'operator' && me().get('dept', '') == 'Operations'); }
+    // Everyone in Operations (and admins) logs devices and damage. The IT department can view them.
+    function isOperator() { return isAdmin() || (isMember() && me().get('dept', '') == 'Operations'); }
     function canViewDevices() { return isOperator() || (isMember() && me().get('dept', '') == 'IT'); }
     function validDept() { return request.resource.data.get('dept', '') in ['', 'Operations', 'IT', 'Data Analysis']; }
     // People pick their department once (at sign-up, or later if it's empty); after that only admins change it.
@@ -74,8 +74,8 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Device deployments and damage reports: operators, admins and the IT department see all of them;
-    // operators add their own and can edit or delete only their own; admins can change any; IT only views.
+    // Device deployments and damage reports: Operations, admins and the IT department see all of them;
+    // Operations members add their own and can edit or delete only their own; admins can change any; IT only views.
     match /deployments/{id} {
       allow read: if canViewDevices();
       allow create: if isOperator() && validDevice(request.resource.data);

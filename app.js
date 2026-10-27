@@ -53,8 +53,8 @@ let store, me = null, settings = { start: '09:30', nightStart: '21:00', grace: 1
 const isAdmin = () => me?.role === 'admin';
 const DEPTS = ['Operations', 'IT', 'Data Analysis'];
 const deptOf = (u) => DEPTS.find((d) => d.toLowerCase() === String(u?.dept || '').trim().toLowerCase()) || '';
-// Operators are part of Operations. They (and admins) log devices; the IT department can view them.
-const isOperator = () => isAdmin() || (me?.role === 'operator' && deptOf(me) === 'Operations');
+// Everyone in Operations (and admins) logs devices and damage; the IT department can view them.
+const isOperator = () => isAdmin() || deptOf(me) === 'Operations';
 const canSeeDevices = () => isOperator() || deptOf(me) === 'IT';
 const ROLE_LABEL = { admin: 'Admin', operator: 'Operator', member: 'Member' };
 const ROLE_RANK = { admin: 0, operator: 1, member: 2 };
@@ -687,7 +687,7 @@ $('#memberList').addEventListener('click', async (e) => {
 
 const ROLE_CONFIRM = {
   admin: (n) => `Give admin access to ${n}? They will see everyone's attendance, devices and laptops, and can manage the team.`,
-  operator: (n, d) => `Make ${n} an operator? They will be able to log device deployments and damage reports.${d !== 'Operations' ? '\n\nOperators are part of Operations, so their department will be set to Operations.' : ''}`,
+  operator: (n, d) => `Make ${n} an operator?${d !== 'Operations' ? '\n\nOperators are part of Operations, so their department will be set to Operations — which also lets them log device deployments and damage reports.' : ''}`,
   member: (n) => `Make ${n} a regular member? They will lose any admin or operator access.`,
 };
 
@@ -866,7 +866,7 @@ const DEV_FORMS = {
 function refreshOperatorNames() {
   const names = new Map();
   const add = (n) => { const c = cleanName(n); if (c) names.set(c.toLowerCase(), c); };
-  users.filter((u) => u.role === 'operator' || u.role === 'admin' || u.uid === me.uid).forEach((u) => add(u.name));
+  users.filter((u) => deptOf(u) === 'Operations' || u.role === 'operator' || u.uid === me.uid).forEach((u) => add(u.name));
   [...devData.deployments, ...devData.damages].forEach((r) => add(takenOf(r)));
   $('#operatorNames').innerHTML = [...names.values()].sort((a, b) => a.localeCompare(b)).map((n) => `<option value="${esc(n)}"></option>`).join('');
 }
