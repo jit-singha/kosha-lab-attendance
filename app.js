@@ -154,7 +154,9 @@ async function punch(kind) {
     if (kind === 'in') {
       const date = shiftTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
       id = `${me.uid}_${date}`;
-      existing = await store.getAttendance(id);
+      // Search the member's own records rather than opening today's record directly: for a record that
+      // doesn't exist yet the security rules can't confirm whose it is, so a direct read is refused for members.
+      existing = (await myRecords()).find((r) => r.id === id);
       if (existing) return setStatus(`You already checked in for this ${SHIFT_LABEL[existing.shift || shift]} shift at <b>${hm(existing.inTs)}</b>.`, 'err');
     } else {
       // Check out of the most recent shift, whichever shift and date it was recorded on.
