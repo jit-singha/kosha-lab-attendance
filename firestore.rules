@@ -8,8 +8,12 @@ service cloud.firestore {
     function isOwner() { return signedIn() && request.auth.token.email == 'js0234092@gmail.com'; }
     function myDoc() { return /databases/$(db)/documents/users/$(request.auth.uid); }
     function isMember() { return signedIn() && exists(myDoc()); }
-    function isAdmin() { return isOwner() || (isMember() && get(myDoc()).data.role == 'admin'); }
-    function isOperator() { return isAdmin() || (isMember() && get(myDoc()).data.role == 'operator'); }
+    function me() { return get(myDoc()).data; }
+    function isAdmin() { return isOwner() || (isMember() && me().role == 'admin'); }
+    // Operators are part of Operations; they (and admins) log devices. The IT department can view devices.
+    function isOperator() { return isAdmin() || (isMember() && me().role == 'operator' && me().get('dept', '') == 'Operations'); }
+    function canViewDevices() { return isOperator() || (isMember() && me().get('dept', '') == 'IT'); }
+    function sameDept() { return request.resource.data.get('dept', '') == resource.data.get('dept', ''); }
     // Device records hold a mix of types: counts = { '03W': n, 'Pi': n, 'Cubic': n }, at least one device in total.
     function cnt(d, t) { return d.counts.get(t, 0); }
     function validDevice(d) {
@@ -20,14 +24,15 @@ service cloud.firestore {
     }
     function nearNow(ts) { return ts is int && ts > request.time.toMillis() - 300000 && ts < request.time.toMillis() + 300000; }
 
-    // Profiles. People can create their own profile only as a "member";
-    // only admins can grant admin access or remove people.
+    // Profiles. People can create their own profile only as a "member" with no department;
+    // only admins can set roles and departments, or remove people.
     match /users/{uid} {
       allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow create: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && request.resource.data.role == 'member');
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == 'member'
+            && request.resource.data.get('dept', '') == '');
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role && sameDept());
       allow delete: if isAdmin();
     }
 
@@ -63,16 +68,16 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Device deployments and damage reports: operators and admins see all of them;
-    // operators add their own and can edit or delete only their own; admins can change any.
+    // Device deployments and damage reports: operators, admins and the IT department see all of them;
+    // operators add their own and can edit or delete only their own; admins can change any; IT only views.
     match /deployments/{id} {
-      allow read: if isOperator();
+      allow read: if canViewDevices();
       allow create: if isOperator() && validDevice(request.resource.data);
       allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data));
       allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);
     }
     match /damages/{id} {
-      allow read: if isOperator();
+      allow read: if canViewDevices();
       allow create: if isOperator() && validDevice(request.resource.data);
       allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data));
       allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);

@@ -51,7 +51,11 @@ const isOwner = (u) => !!OWNER_EMAIL && u?.email === OWNER_EMAIL.toLowerCase();
 
 let store, me = null, settings = { start: '09:30', grace: 10 }, users = [];
 const isAdmin = () => me?.role === 'admin';
-const isOperator = () => me?.role === 'admin' || me?.role === 'operator';
+const DEPTS = ['Operations', 'IT', 'Data Analysis'];
+const deptOf = (u) => DEPTS.find((d) => d.toLowerCase() === String(u?.dept || '').trim().toLowerCase()) || '';
+// Operators are part of Operations. They (and admins) log devices; the IT department can view them.
+const isOperator = () => isAdmin() || (me?.role === 'operator' && deptOf(me) === 'Operations');
+const canSeeDevices = () => isOperator() || deptOf(me) === 'IT';
 const ROLE_LABEL = { admin: 'Admin', operator: 'Operator', member: 'Member' };
 const ROLE_RANK = { admin: 0, operator: 1, member: 2 };
 const roleLabel = (u) => (isOwner(u) ? 'Owner' : ROLE_LABEL[u.role] || 'Member');
@@ -259,14 +263,19 @@ function renderMembers() {
     const roleBtn = owner || self ? '' : `<select class="small-select role-select" data-role-select="${u.uid}" title="Change access">
         ${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}"${(u.role || 'member') === v ? ' selected' : ''}>${l}</option>`).join('')}
       </select>`;
+    const dept = deptOf(u);
+    const deptSel = `<select class="small-select dept-select" data-dept-select="${u.uid}" title="Department">
+        <option value=""${dept ? '' : ' selected'}>No department</option>
+        ${DEPTS.map((d) => `<option${dept === d ? ' selected' : ''}>${d}</option>`).join('')}
+      </select>`;
     const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member">✕</button>`;
     return `<div class="card member">
       <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">📷</span></button>
       <div class="meta">
         <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
         <small>${esc(u.email)}</small>
-        <small>${esc([u.dept, u.empId].filter(Boolean).join(' · ') || 'Team member')}</small>
-        <div class="member-actions"><span class="pill ${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}</div>
+        ${u.empId ? `<small>${esc(u.empId)}</small>` : ''}
+        <div class="member-actions"><span class="pill role-${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}${deptSel}</div>
       </div>
       ${delBtn}
     </div>`;
@@ -463,10 +472,12 @@ async function enterApp(profile) {
   $('#demoBanner').hidden = store.mode !== 'demo';
   renderMe();
   $('#meRole').textContent = roleLabel(me);
-  $('#meRole').className = 'pill ' + (me.role || 'member');
+  $('#meRole').className = 'pill role-' + (me.role || 'member');
   $('#helloName').textContent = me.name.split(' ')[0];
   $$('[data-admin-only]').forEach((el) => { el.hidden = !isAdmin(); });
-  $$('[data-operator-only]').forEach((el) => { el.hidden = !isOperator(); });
+  $$('[data-devices-nav]').forEach((el) => { el.hidden = !canSeeDevices(); });
+  $$('[data-logger-only]').forEach((el) => { el.hidden = !isOperator(); });
+  $('#devViewOnly').hidden = isOperator();
   $$('[data-member-only]').forEach((el) => { el.hidden = isAdmin(); });
   await loadShared();
   const allowed = [...$$('.nav-item')].filter((n) => !n.hidden).map((n) => n.dataset.tab);
@@ -556,7 +567,8 @@ $('#memberForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   const name = $('#mName').value.trim();
   const ok = await guard(async () => {
-    await store.createMember({ name, email: $('#mEmail').value, empId: $('#mId').value.trim(), dept: $('#mDept').value.trim(), role: $('#mRole').value }, $('#mPass').value);
+    if ($('#mRole').value === 'operator' && $('#mDept').value !== 'Operations') throw new Error('Operators must be in the Operations department.');
+    await store.createMember({ name, email: $('#mEmail').value, empId: $('#mId').value.trim(), dept: $('#mDept').value, role: $('#mRole').value }, $('#mPass').value);
     return true;
   }, $('#memberErr'));
   btn.disabled = false;
@@ -582,18 +594,41 @@ $('#memberList').addEventListener('click', async (e) => {
 
 const ROLE_CONFIRM = {
   admin: (n) => `Give admin access to ${n}? They will see everyone's attendance, devices and laptops, and can manage the team.`,
-  operator: (n) => `Make ${n} an operator? They will be able to log device deployments and damage reports.`,
+  operator: (n, d) => `Make ${n} an operator? They will be able to log device deployments and damage reports.${d !== 'Operations' ? '\n\nOperators are part of Operations, so their department will be set to Operations.' : ''}`,
   member: (n) => `Make ${n} a regular member? They will lose any admin or operator access.`,
 };
+
+async function changeMember(u, patch, msg) {
+  if (await guard(async () => { await store.updateUser(u.uid, patch); return true; })) {
+    Object.assign(u, patch);
+    if (u.uid === me.uid) Object.assign(me, patch);
+    toast(msg);
+  }
+  renderMembers();
+}
+
 $('#memberList').addEventListener('change', async (e) => {
-  const sel = e.target.closest('[data-role-select]');
-  if (!sel) return;
-  const u = userById(sel.dataset.roleSelect), to = sel.value;
-  if (!confirm(ROLE_CONFIRM[to](u.name))) { sel.value = u.role || 'member'; return; }
-  if (await guard(async () => { await store.updateUser(u.uid, { role: to }); return true; })) {
-    u.role = to; renderMembers(); toast(`${u.name} is now ${to === 'admin' || to === 'operator' ? 'an' : 'a'} ${ROLE_LABEL[to].toLowerCase()}`);
-  } else sel.value = u.role || 'member';
+  const roleSel = e.target.closest('[data-role-select]');
+  const deptSel = e.target.closest('[data-dept-select]');
+  if (roleSel) {
+    const u = userById(roleSel.dataset.roleSelect), to = roleSel.value;
+    if (!confirm(ROLE_CONFIRM[to](u.name, deptOf(u)))) return renderMembers();
+    const patch = to === 'operator' ? { role: to, dept: 'Operations' } : { role: to };
+    await changeMember(u, patch, `${u.name} is now ${to === 'admin' || to === 'operator' ? 'an' : 'a'} ${ROLE_LABEL[to].toLowerCase()}`);
+  } else if (deptSel) {
+    const u = userById(deptSel.dataset.deptSelect), to = deptSel.value;
+    const patch = { dept: to };
+    if (u.role === 'operator' && to !== 'Operations') {
+      if (!confirm(`Operators are part of Operations. Moving ${u.name} to ${to || 'no department'} will make them a regular member. Continue?`)) return renderMembers();
+      patch.role = 'member';
+    }
+    await changeMember(u, patch, `${u.name} moved to ${to || 'no department'}`);
+  }
 });
+
+// Picking Operator in the add form puts the new member in Operations.
+$('#mRole').addEventListener('change', () => { if ($('#mRole').value === 'operator') $('#mDept').value = 'Operations'; });
+$('#mDept').addEventListener('change', () => { if ($('#mDept').value !== 'Operations' && $('#mRole').value === 'operator') $('#mRole').value = 'member'; });
 
 // Laptops
 $('#lpFrom').value = dayKey();
@@ -640,7 +675,7 @@ let devView = 'deployments';
 let depGeo = null; // GPS fix attached to the deployment being entered
 let devFormsFor = null; // uid the device forms were last prepared for
 
-const canEditRec = (r) => isAdmin() || r.uid === me.uid;
+const canEditRec = (r) => isAdmin() || (isOperator() && r.uid === me.uid);
 const devScopeDate = () => $('#devDate').value || dayKey();
 const inDevScope = (r) => $('#devAll').checked || r.date === devScopeDate();
 const byNewest = (a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));

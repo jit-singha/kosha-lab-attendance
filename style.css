@@ -223,8 +223,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .hello { text-align: center; color: var(--muted); }
 .hello b { color: var(--text); }
 
-.pill.admin { background: rgba(139,92,255,.18); color: #b9a2ff; }
-.pill.member { background: rgba(34,230,255,.1); color: var(--cyan); }
+.pill.role-admin { background: rgba(139,92,255,.18); color: #b9a2ff; }
+.pill.role-member { background: rgba(34,230,255,.1); color: var(--cyan); }
 .pill.info { background: rgba(34,230,255,.12); color: var(--cyan); }
 .pill.muted-pill { background: rgba(255,255,255,.06); color: var(--muted); }
 
@@ -257,8 +257,13 @@ td.actions .btn + .btn { margin-left: 6px; }
   .member-form { grid-template-columns: 1fr; }
 }
 
+/* Departments */
+.info-banner { color: var(--cyan); background: rgba(34,230,255,.07); border-color: rgba(34,230,255,.3); }
+.dept-select { padding: 5px 8px; font-size: 12px; border-radius: 8px; width: auto; }
+.pill.dept { background: rgba(255,255,255,.06); color: var(--text); }
+
 /* Operator role + Devices */
-.pill.operator { background: rgba(255,197,61,.14); color: var(--amber); }
+.pill.role-operator { background: rgba(255,197,61,.14); color: var(--amber); }
 .pill.dev { background: rgba(91,140,255,.16); color: #9db8ff; font-family: 'JetBrains Mono', monospace; }
 .role-select { padding: 5px 8px; font-size: 12px; border-radius: 8px; }
 textarea { font: inherit; color: var(--text); background: rgba(8,8,20,.7); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; outline: none; width: 100%; resize: vertical; color-scheme: dark; transition: border .2s, box-shadow .2s; }

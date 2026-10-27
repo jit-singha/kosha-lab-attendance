@@ -67,7 +67,7 @@
         <button class="nav-item" data-tab="history" data-member-only><i>◷</i> My Attendance</button>
         <button class="nav-item" data-tab="dashboard" data-admin-only><i>▦</i> Dashboard</button>
         <button class="nav-item" data-tab="laptops"><i>▭</i> Laptops</button>
-        <button class="nav-item" data-tab="devices" data-operator-only><i>⬡</i> Devices</button>
+        <button class="nav-item" data-tab="devices" data-devices-nav><i>⬡</i> Devices</button>
         <button class="nav-item" data-tab="members" data-admin-only><i>◎</i> Team &amp; Access</button>
         <button class="nav-item" data-tab="settings" data-admin-only><i>⚙</i> Settings</button>
       </nav>
@@ -209,8 +209,11 @@
           </div>
         </section>
 
-        <!-- DEVICES (operators + admins) -->
+        <!-- DEVICES (operators + admins log; IT views) -->
         <section id="tab-devices" class="panel">
+          <div id="devViewOnly" class="banner info-banner" hidden>
+            👁 View only — the IT department can see all deployments and damage reports and export them, but only operators and admins can add or change records.
+          </div>
           <div class="toolbar">
             <div class="seg dev-seg">
               <button class="seg-btn active" data-dev="deployments">Deployments</button>
@@ -255,7 +258,7 @@
 
           <!-- Deployments -->
           <div id="dev-deployments" class="dev-view">
-            <div class="card">
+            <div class="card" data-logger-only>
               <h3 id="depFormTitle">Log a deployment</h3>
               <form id="depForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="depDate" type="date" required></label>
@@ -290,7 +293,7 @@
 
           <!-- Damage -->
           <div id="dev-damages" class="dev-view" hidden>
-            <div class="card">
+            <div class="card" data-logger-only>
               <h3 id="dmgFormTitle">Report damaged devices</h3>
               <form id="dmgForm" class="dev-form">
                 <label class="field"><span>Date</span><input id="dmgDate" type="date" required></label>
@@ -337,7 +340,12 @@
               <input id="mEmail" type="email" placeholder="Email" required>
               <input id="mPass" placeholder="Temporary password (min 6)" minlength="6" required>
               <input id="mId" placeholder="Employee ID">
-              <input id="mDept" placeholder="Role / Department">
+              <select id="mDept" required>
+                <option value="">Department…</option>
+                <option>Operations</option>
+                <option>IT</option>
+                <option>Data Analysis</option>
+              </select>
               <select id="mRole"><option value="member">Member</option><option value="operator">Operator</option><option value="admin">Admin</option></select>
               <button class="btn btn-primary" type="submit">Add member</button>
             </form>
