@@ -482,6 +482,29 @@ $('#btnIn').addEventListener('click', () => punch('in'));
 $('#btnOut').addEventListener('click', () => punch('out'));
 $('#dashDate').addEventListener('change', renderDashboard);
 
+$('#btnExport').addEventListener('click', async () => {
+  const date = $('#dashDate').value || dayKey();
+  const logs = await guard(() => store.attendanceByDate(date));
+  if (!logs) return;
+  const byUid = new Map(logs.map((l) => [l.uid, l]));
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'].join(',')];
+  [...users].sort((a, b) => a.name.localeCompare(b.name)).forEach((u) => {
+    const l = byUid.get(u.uid), loc = l?.loc;
+    lines.push([date, u.name, u.email, u.empId, u.dept, l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
+      l ? (l.late ? 'Late' : 'On time') : 'Absent', l?.late ? l.lateBy : '',
+      loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''].map(q).join(','));
+  });
+  // The BOM makes Excel read the file as UTF-8 so addresses keep their characters.
+  const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `kosha-lab-attendance-${date}.csv` });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`Exported ${users.length} member${users.length === 1 ? '' : 's'} for ${niceDate(date)}`);
+});
+
 document.addEventListener('click', (e) => {
   const id = e.target.closest('[data-map]')?.dataset.map;
   const r = id && mapRecords.get(id);
