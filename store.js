@@ -63,7 +63,7 @@ function localStore() {
   return {
     mode: 'demo',
     onAuth(cb) { listener = cb; setTimeout(emit, 0); },
-    async signUp({ name, email, password }) { s.session = makeAccount({ name, email }, password); write(); emit(); },
+    async signUp({ name, email, password, dept = '' }) { s.session = makeAccount({ name, email, dept }, password); write(); emit(); },
     async signIn(email, password) {
       const a = s.accounts[email.trim().toLowerCase()];
       if (!a || a.password !== password) throw err('invalid-credential');
@@ -131,10 +131,10 @@ async function firebaseStore() {
         cb({ uid: u.uid, profile });
       });
     },
-    async signUp({ name, email, password }) {
+    async signUp({ name, email, password, dept = '' }) {
       signingUp = (async () => {
         const cred = await A.createUserWithEmailAndPassword(auth, email.trim(), password);
-        await F.setDoc(ref('users', cred.user.uid), profileFor(cred.user.uid, { name, email: email.trim() }));
+        await F.setDoc(ref('users', cred.user.uid), profileFor(cred.user.uid, { name, email: email.trim(), dept }));
       })();
       try { await signingUp; } finally { signingUp = null; }
     },

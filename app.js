@@ -519,6 +519,21 @@ $('#profileModal').addEventListener('click', (e) => { if (e.target.id === 'profi
 $('#btnUploadPhoto').addEventListener('click', () => pickPhoto(me.uid));
 $('#btnRemovePhoto').addEventListener('click', () => setPhoto(me.uid, ''));
 
+let deptSkipped = false;
+$$('[data-pick-dept]').forEach((b) => b.addEventListener('click', async () => {
+  const dept = b.dataset.pickDept;
+  if (!confirm(`Set your department to ${dept}? Only an admin can change it after this.`)) return;
+  if (await guard(async () => { await store.updateUser(me.uid, { dept }); return true; })) {
+    me.dept = dept;
+    const u = userById(me.uid);
+    if (u) u.dept = dept;
+    $('#deptModal').classList.remove('open');
+    toast(`Department set to ${dept}`);
+    enterApp(me); // refresh what this department can see (e.g. Devices for IT)
+  }
+}));
+$('#deptLater').addEventListener('click', () => { deptSkipped = true; $('#deptModal').classList.remove('open'); });
+
 async function enterApp(profile) {
   me = profile;
   $('#boot').hidden = true;
@@ -537,12 +552,17 @@ async function enterApp(profile) {
   $('#devViewOnly').hidden = isOperator();
   $$('[data-member-only]').forEach((el) => { el.hidden = isAdmin(); });
   await loadShared();
+  // People who signed up before departments existed choose theirs once. Admins can skip.
+  $('#deptLater').hidden = !isAdmin();
+  $('#deptModal').classList.toggle('open', !deptOf(me) && !deptSkipped);
   const allowed = [...$$('.nav-item')].filter((n) => !n.hidden).map((n) => n.dataset.tab);
   showTab(allowed.includes(currentTab) ? currentTab : 'punch');
 }
 
 function showAuth() {
   me = null;
+  deptSkipped = false;
+  $('#deptModal').classList.remove('open');
   $('#boot').hidden = true;
   $('#appShell').hidden = true;
   $('#removedScreen').hidden = true;
@@ -557,8 +577,8 @@ let authMode = 'signin';
 $$('.seg-btn[data-auth]').forEach((b) => b.addEventListener('click', () => {
   authMode = b.dataset.auth;
   $$('.seg-btn[data-auth]').forEach((x) => x.classList.toggle('active', x === b));
-  $('.signup-only').hidden = authMode !== 'signup';
-  $('#aName').required = authMode === 'signup';
+  $$('.signup-only').forEach((el) => { el.hidden = authMode !== 'signup'; });
+  $('#aName').required = $('#aDept').required = authMode === 'signup';
   $('#aPass').autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   $('#authBtn').textContent = authMode === 'signup' ? 'Create account' : 'Sign in';
   $('#authErr').textContent = '';
@@ -569,7 +589,7 @@ $('#authForm').addEventListener('submit', async (e) => {
   const btn = $('#authBtn');
   btn.disabled = true;
   await guard(() => authMode === 'signup'
-    ? store.signUp({ name: $('#aName').value.trim(), email: $('#aEmail').value, password: $('#aPass').value })
+    ? store.signUp({ name: $('#aName').value.trim(), email: $('#aEmail').value, password: $('#aPass').value, dept: $('#aDept').value })
     : store.signIn($('#aEmail').value, $('#aPass').value), $('#authErr'));
   btn.disabled = false;
 });

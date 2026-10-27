@@ -33,6 +33,14 @@
       </div>
       <form id="authForm" class="auth-form">
         <label class="field signup-only" hidden><span>Full name</span><input id="aName" autocomplete="name"></label>
+        <label class="field signup-only" hidden><span>Department</span>
+          <select id="aDept">
+            <option value="">Choose your department…</option>
+            <option>Operations</option>
+            <option>IT</option>
+            <option>Data Analysis</option>
+          </select>
+        </label>
         <label class="field"><span>Email</span><input id="aEmail" type="email" autocomplete="email" required></label>
         <label class="field"><span>Password</span><input id="aPass" type="password" autocomplete="current-password" minlength="6" required></label>
         <button id="authBtn" class="btn btn-primary" type="submit">Sign in</button>
@@ -433,6 +441,19 @@
         <div><b id="mapAddr"></b><small id="mapMeta" class="muted"></small></div>
         <a id="mapGoogle" class="btn btn-ghost btn-small" target="_blank" rel="noopener">Open in Google Maps</a>
       </div>
+    </div>
+  </div>
+
+  <div id="deptModal" class="modal">
+    <div class="modal-card profile-card">
+      <h3>Which department are you in?</h3>
+      <p class="muted small">Choose once — after this, only an admin can change it.</p>
+      <div class="dept-choices">
+        <button class="btn btn-ghost" data-pick-dept="Operations">Operations</button>
+        <button class="btn btn-ghost" data-pick-dept="IT">IT</button>
+        <button class="btn btn-ghost" data-pick-dept="Data Analysis">Data Analysis</button>
+      </div>
+      <button id="deptLater" class="btn btn-ghost btn-small" hidden>Skip for now</button>
     </div>
   </div>
 

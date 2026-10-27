@@ -268,6 +268,9 @@ td.actions .btn + .btn { margin-left: 6px; }
 .rotate-card b { color: var(--text); }
 
 /* Departments */
+.dept-choices { display: grid; gap: 10px; width: 100%; margin: 14px 0 6px; }
+.dept-choices .btn { padding: 14px; font-size: 15px; }
+.dept-choices .btn:hover { border-color: var(--cyan); background: rgba(34,230,255,.08); }
 .info-banner { color: var(--cyan); background: rgba(34,230,255,.07); border-color: rgba(34,230,255,.3); }
 .dept-select { padding: 5px 8px; font-size: 12px; border-radius: 8px; width: auto; }
 .pill.dept { background: rgba(255,255,255,.06); color: var(--text); }
