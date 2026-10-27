@@ -254,12 +254,17 @@ async function renderHistory() {
     : '<tr><td colspan="5" class="empty">No attendance yet. Check in from the Check In page.</td></tr>';
 }
 
-// Everyone for the selected date and shift filter. A person's shift is the one their check-in was
-// recorded on; people who haven't checked in are listed under their current shift.
+const inDashDept = (u) => {
+  const d = $('#dashDept').value;
+  return d === 'all' || (d === 'none' ? !deptOf(u) : deptOf(u) === d);
+};
+
+// Everyone for the selected date, department and shift filters. A person's shift is the one their
+// check-in was recorded on; people who haven't checked in are listed under their current shift.
 function dashRoster(logs) {
   const byUid = new Map(logs.map((l) => [l.uid, l]));
   const f = $('#dashShift').value;
-  return users.map((u) => {
+  return users.filter(inDashDept).map((u) => {
     const rec = byUid.get(u.uid);
     return { u, rec, shift: rec?.shift || shiftOf(u) };
   }).filter((x) => f === 'all' || x.shift === f);
@@ -283,9 +288,9 @@ async function renderDashboard() {
     const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
     return { sort: l ? l.inTs : Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l)}</td><td>${locCell(l)}</td></tr>` };
   }).sort((a, b) => a.sort - b.sort);
-  $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody on this shift.' : 'No members yet.'}</td></tr>`;
+  $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody matches these filters.' : 'No members yet.'}</td></tr>`;
 
-  const counts = users.map((u) => {
+  const counts = users.filter(inDashDept).map((u) => {
     const ls = (late || []).filter((l) => l.uid === u.uid);
     return { u, n: ls.length, mins: ls.reduce((s, l) => s + (l.lateBy || 0), 0) };
   }).filter((x) => x.n).sort((a, b) => b.n - a.n || b.mins - a.mins);
@@ -587,6 +592,7 @@ $('#btnIn').addEventListener('click', () => punch('in'));
 $('#btnOut').addEventListener('click', () => punch('out'));
 $('#dashDate').addEventListener('change', renderDashboard);
 $('#dashShift').addEventListener('change', renderDashboard);
+$('#dashDept').addEventListener('change', renderDashboard);
 
 $('#btnExport').addEventListener('click', async () => {
   const date = $('#dashDate').value || dayKey();
@@ -599,7 +605,9 @@ $('#btnExport').addEventListener('click', async () => {
       l ? (l.late ? 'Late' : 'On time') : 'Absent', l?.late ? l.lateBy : '',
       loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
   });
-  downloadCsv(`kosha-lab-attendance-${date}${f === 'all' ? '' : `-${f}-shift`}.csv`,
+  const d = $('#dashDept').value;
+  const deptPart = d === 'all' ? '' : `-${(d === 'none' ? 'no-department' : d).toLowerCase().replace(/\s+/g, '-')}`;
+  downloadCsv(`kosha-lab-attendance-${date}${deptPart}${f === 'all' ? '' : `-${f}-shift`}.csv`,
     ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Shift', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
   toast(`Exported ${rows.length} member${rows.length === 1 ? '' : 's'} for ${niceDate(date)}`);
 });
