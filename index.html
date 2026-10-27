@@ -113,6 +113,7 @@
             <div class="card info-card">
               <h3>Today's policy</h3>
               <div class="policy">
+                <div><span class="muted">Your shift</span><b id="myShiftLabel">Day</b></div>
                 <div><span class="muted">Shift starts</span><b id="shiftLabel">09:30</b></div>
                 <div><span class="muted">Grace period</span><b><span id="graceLabel">10</span> min</b></div>
                 <div><span class="muted">Late after</span><b id="lateAfterLabel">09:40</b></div>
@@ -144,7 +145,14 @@
         <!-- DASHBOARD (admin) -->
         <section id="tab-dashboard" class="panel">
           <div class="toolbar">
-            <label class="field inline"><span>Date</span><input type="date" id="dashDate"></label>
+            <div class="head-tools">
+              <label class="field inline"><span>Date</span><input type="date" id="dashDate"></label>
+              <select id="dashShift" class="small-select" title="Shift">
+                <option value="all">All shifts</option>
+                <option value="day">☀ Day shift</option>
+                <option value="night">☾ Night shift</option>
+              </select>
+            </div>
             <button id="btnExport" class="btn btn-ghost btn-small">Export CSV</button>
           </div>
           <div class="stats">
@@ -157,7 +165,7 @@
             <div class="card-head"><h3>Attendance log</h3><span id="rateBadge" class="badge">0% present</span></div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Member</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th></tr></thead>
+                <thead><tr><th>Member</th><th>Shift</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th></tr></thead>
                 <tbody id="logBody"></tbody>
               </table>
             </div>
@@ -347,9 +355,18 @@
                 <option>Data Analysis</option>
               </select>
               <select id="mRole"><option value="member">Member</option><option value="operator">Operator</option><option value="admin">Admin</option></select>
+              <select id="mShift"><option value="day">☀ Day shift</option><option value="night">☾ Night shift</option></select>
               <button class="btn btn-primary" type="submit">Add member</button>
             </form>
             <div id="memberErr" class="form-err"></div>
+          </div>
+          <div class="card rotate-card">
+            <div>
+              <h3>Shift rotation</h3>
+              <p class="muted small">Currently <b id="rotDay">0</b> on ☀ Day shift and <b id="rotNight">0</b> on ☾ Night shift. When the shifts rotate, swap everyone at once — or change one person using the shift menu on their card. Past attendance keeps the shift it was recorded on.</p>
+              <p id="rotLast" class="muted small"></p>
+            </div>
+            <button id="btnRotate" class="btn btn-primary">⇄ Rotate shifts</button>
           </div>
           <div id="memberList" class="member-grid"></div>
         </section>
@@ -358,7 +375,9 @@
         <section id="tab-settings" class="panel">
           <div class="card settings">
             <h3>Shift rules</h3>
-            <label class="field"><span>Shift start time</span><input type="time" id="setStart"></label>
+            <label class="field"><span>☀ Day shift starts</span><input type="time" id="setStart"></label>
+            <label class="field"><span>☾ Night shift starts</span><input type="time" id="setNightStart"></label>
+            <p class="muted small">Night shift check-ins and check-outs after midnight count towards the night the shift started.</p>
             <label class="field"><span>Grace period (minutes)</span><input type="number" id="setGrace" min="0" max="180"></label>
             <button id="btnSave" class="btn btn-primary">Save settings</button>
             <hr>

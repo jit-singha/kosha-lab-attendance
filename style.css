@@ -257,6 +257,16 @@ td.actions .btn + .btn { margin-left: 6px; }
   .member-form { grid-template-columns: 1fr; }
 }
 
+/* Shifts */
+.pill.shift-day { background: rgba(255,197,61,.12); color: var(--amber); white-space: nowrap; }
+.pill.shift-night { background: rgba(139,92,255,.18); color: #b9a2ff; white-space: nowrap; }
+.shift-sel-day { color: var(--amber); }
+.shift-sel-night { color: #b9a2ff; }
+.rotate-card { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+.rotate-card > div { flex: 1; min-width: 240px; }
+.rotate-card h3 { margin-bottom: 6px; }
+.rotate-card b { color: var(--text); }
+
 /* Departments */
 .info-banner { color: var(--cyan); background: rgba(34,230,255,.07); border-color: rgba(34,230,255,.3); }
 .dept-select { padding: 5px 8px; font-size: 12px; border-radius: 8px; width: auto; }

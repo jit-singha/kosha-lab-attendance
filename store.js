@@ -2,13 +2,13 @@
 // Both implement the same async API so the UI doesn't care which one is active.
 import { firebaseConfig, OWNER_EMAIL } from './firebase-config.js';
 
-const DEFAULT_SETTINGS = { start: '09:30', grace: 10 };
+const DEFAULT_SETTINGS = { start: '09:30', nightStart: '21:00', grace: 10 };
 const COLORS = ['#22e6ff', '#8b5cff', '#ff3ea5', '#2bffa4', '#ffc53d', '#ff7a45', '#5b8cff'];
 const pickColor = (s) => COLORS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 const isOwnerEmail = (email) => !!OWNER_EMAIL && email.toLowerCase() === OWNER_EMAIL.toLowerCase();
 
-function profileFor(uid, { name, email, empId = '', dept = '', role = 'member' }) {
-  return { uid, name, email: email.toLowerCase(), empId, dept, role: isOwnerEmail(email) ? 'admin' : role, color: pickColor(email), createdAt: Date.now() };
+function profileFor(uid, { name, email, empId = '', dept = '', role = 'member', shift = 'day' }) {
+  return { uid, name, email: email.toLowerCase(), empId, dept, shift, role: isOwnerEmail(email) ? 'admin' : role, color: pickColor(email), createdAt: Date.now() };
 }
 
 const friendly = (e) => {

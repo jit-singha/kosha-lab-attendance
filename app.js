@@ -49,7 +49,7 @@ function resizePhoto(file, size = 192) {
 }
 const isOwner = (u) => !!OWNER_EMAIL && u?.email === OWNER_EMAIL.toLowerCase();
 
-let store, me = null, settings = { start: '09:30', grace: 10 }, users = [];
+let store, me = null, settings = { start: '09:30', nightStart: '21:00', grace: 10 }, users = [];
 const isAdmin = () => me?.role === 'admin';
 const DEPTS = ['Operations', 'IT', 'Data Analysis'];
 const deptOf = (u) => DEPTS.find((d) => d.toLowerCase() === String(u?.dept || '').trim().toLowerCase()) || '';
@@ -60,7 +60,24 @@ const ROLE_LABEL = { admin: 'Admin', operator: 'Operator', member: 'Member' };
 const ROLE_RANK = { admin: 0, operator: 1, member: 2 };
 const roleLabel = (u) => (isOwner(u) ? 'Owner' : ROLE_LABEL[u.role] || 'Member');
 const userById = (id) => users.find((u) => u.uid === id);
-const lateCutoff = () => toMin(settings.start) + Number(settings.grace || 0);
+
+// ---------- Shifts ----------
+const SHIFT_LABEL = { day: '☀ Day', night: '☾ Night' };
+const shiftOf = (u) => (u?.shift === 'night' ? 'night' : 'day');
+const shiftStart = (s) => (s === 'night' ? settings.nightStart || '21:00' : settings.start);
+const lateCutoff = (s = shiftOf(me)) => toMin(shiftStart(s)) + Number(settings.grace || 0);
+const fmtLate = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
+const shiftPill = (s) => `<span class="pill shift-${s}">${SHIFT_LABEL[s]}</span>`;
+
+// Where a moment falls relative to a shift's start. Minutes are wrapped to ±12 h, so a night-shift
+// check-out at 06:00 belongs to the shift that started at 21:00 the evening before.
+function shiftTiming(ts, s) {
+  const d = new Date(ts);
+  let diff = d.getHours() * 60 + d.getMinutes() - toMin(shiftStart(s));
+  if (diff > 720) diff -= 1440;
+  if (diff < -720) diff += 1440;
+  return { diff, date: dayKey(new Date(ts - diff * 60000)), late: diff > Number(settings.grace || 0), lateBy: Math.max(0, diff) };
+}
 
 function toast(msg) {
   const t = $('#toast');
@@ -129,7 +146,8 @@ async function locate(onStatus = setStatus) {
 const setStatus = (msg, cls = '') => { const s = $('#punchStatus'); s.className = 'status-box ' + cls; s.innerHTML = msg; };
 
 async function punch(kind) {
-  const today = dayKey();
+  const shift = shiftOf(me);
+  const today = shiftTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
   const id = `${me.uid}_${today}`;
   let existing;
   try { existing = await store.getAttendance(id); } catch (e) { return setStatus(esc(e.message), 'err'); }
@@ -143,19 +161,16 @@ async function punch(kind) {
     const loc = await locate();
     const now = Date.now();
     if (kind === 'in') {
-      const d = new Date(now);
-      const mins = d.getHours() * 60 + d.getMinutes();
-      const lateBy = Math.max(0, mins - toMin(settings.start));
-      const late = mins > lateCutoff();
-      await store.saveAttendance({ id, uid: me.uid, name: me.name, date: today, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc });
+      const { late, lateBy } = shiftTiming(now, shift);
+      await store.saveAttendance({ id, uid: me.uid, name: me.name, date: today, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc });
       const where = ` from <b>${esc(loc.place || coords(loc))}</b> <span class="muted">(${coords(loc)}, ±${loc.acc} m)</span>`;
       setStatus(late
-        ? `Checked in at <b>${hm(now)}</b>${where} — <b>late by ${lateBy} min</b>.`
+        ? `Checked in at <b>${hm(now)}</b>${where} — <b>late by ${fmtLate(lateBy)}</b>.`
         : `Checked in at <b>${hm(now)}</b>${where} — on time.`, late ? 'late' : 'ok');
       toast(late ? 'Checked in (late)' : 'Checked in');
     } else {
       await store.saveAttendance({ id, outTs: now, outLoc: loc });
-      setStatus(`Checked out at <b>${hm(now)}</b> from <b>${esc(loc.place || coords(loc))}</b>. Have a good evening, ${esc(me.name.split(' ')[0])}.`, 'ok');
+      setStatus(`Checked out at <b>${hm(now)}</b> from <b>${esc(loc.place || coords(loc))}</b>. ${shift === 'night' ? 'Get some good rest' : 'Have a good evening'}, ${esc(me.name.split(' ')[0])}.`, 'ok');
       toast('Checked out');
     }
     renderRecent();
@@ -169,7 +184,7 @@ async function punch(kind) {
 // ---------- Shared bits ----------
 function statusPill(r) {
   if (!r) return '<span class="pill absent">Absent</span>';
-  return r.late ? `<span class="pill late">Late · ${r.lateBy}m</span>` : '<span class="pill ontime">On time</span>';
+  return r.late ? `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>` : '<span class="pill ontime">On time</span>';
 }
 
 function locCell(r) {
@@ -195,9 +210,11 @@ const closeMap = () => { $('#mapModal').classList.remove('open'); $('#mapFrame')
 
 // ---------- Renderers ----------
 function renderPolicy() {
-  $('#shiftLabel').textContent = settings.start;
+  const s = shiftOf(me);
+  $('#myShiftLabel').textContent = `${SHIFT_LABEL[s]} shift`;
+  $('#shiftLabel').textContent = shiftStart(s);
   $('#graceLabel').textContent = settings.grace;
-  $('#lateAfterLabel').textContent = fmtMin(lateCutoff());
+  $('#lateAfterLabel').textContent = fmtMin(lateCutoff(s));
 }
 
 async function myRecords() {
@@ -225,26 +242,36 @@ async function renderHistory() {
     : '<tr><td colspan="5" class="empty">No attendance yet. Check in from the Check In page.</td></tr>';
 }
 
+// Everyone for the selected date and shift filter. A person's shift is the one their check-in was
+// recorded on; people who haven't checked in are listed under their current shift.
+function dashRoster(logs) {
+  const byUid = new Map(logs.map((l) => [l.uid, l]));
+  const f = $('#dashShift').value;
+  return users.map((u) => {
+    const rec = byUid.get(u.uid);
+    return { u, rec, shift: rec?.shift || shiftOf(u) };
+  }).filter((x) => f === 'all' || x.shift === f);
+}
+
 async function renderDashboard() {
   const date = $('#dashDate').value || dayKey();
   const [logs, late] = await Promise.all([guard(() => store.attendanceByDate(date)), guard(() => store.lateRecords())]);
   if (!logs) return;
   logs.forEach((r) => mapRecords.set(r.id, r));
-  const byUid = new Map(logs.map((l) => [l.uid, l]));
-  const present = users.filter((u) => byUid.has(u.uid));
-  const lateCount = present.filter((u) => byUid.get(u.uid).late).length;
-  $('#stTotal').textContent = users.length;
+  const roster = dashRoster(logs);
+  const present = roster.filter((x) => x.rec);
+  const lateCount = present.filter((x) => x.rec.late).length;
+  $('#stTotal').textContent = roster.length;
   $('#stOnTime').textContent = present.length - lateCount;
   $('#stLate').textContent = lateCount;
-  $('#stAbsent').textContent = users.length - present.length;
-  $('#rateBadge').textContent = `${users.length ? Math.round((present.length / users.length) * 100) : 0}% present`;
+  $('#stAbsent').textContent = roster.length - present.length;
+  $('#rateBadge').textContent = `${roster.length ? Math.round((present.length / roster.length) * 100) : 0}% present`;
 
-  const rows = users.map((u) => {
-    const l = byUid.get(u.uid);
-    const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(u.dept || u.email)}</small></div></div>`;
-    return { sort: l ? l.inTs : Infinity, html: `<tr><td>${who}</td><td class="mono">${l ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l)}</td><td>${locCell(l)}</td></tr>` };
+  const rows = roster.map(({ u, rec: l, shift }) => {
+    const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
+    return { sort: l ? l.inTs : Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l)}</td><td>${locCell(l)}</td></tr>` };
   }).sort((a, b) => a.sort - b.sort);
-  $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : '<tr><td colspan="5" class="empty">No members yet.</td></tr>';
+  $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody on this shift.' : 'No members yet.'}</td></tr>`;
 
   const counts = users.map((u) => {
     const ls = (late || []).filter((l) => l.uid === u.uid);
@@ -256,12 +283,23 @@ async function renderDashboard() {
     : '<div class="empty">No late arrivals recorded.</div>';
 }
 
+function renderRotation() {
+  $('#rotDay').textContent = users.filter((u) => shiftOf(u) === 'day').length;
+  $('#rotNight').textContent = users.filter((u) => shiftOf(u) === 'night').length;
+  const r = settings.lastRotation;
+  $('#rotLast').textContent = r ? `Last rotated on ${niceDate(dayKey(new Date(r.at)))} at ${hm(r.at)} by ${r.by}.` : '';
+}
+
 function renderMembers() {
+  renderRotation();
   const sorted = [...users].sort((a, b) => (ROLE_RANK[a.role] ?? 2) - (ROLE_RANK[b.role] ?? 2) || a.name.localeCompare(b.name));
   $('#memberList').innerHTML = sorted.map((u) => {
     const self = u.uid === me.uid, owner = isOwner(u);
     const roleBtn = owner || self ? '' : `<select class="small-select role-select" data-role-select="${u.uid}" title="Change access">
         ${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}"${(u.role || 'member') === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>`;
+    const shiftSel = `<select class="small-select dept-select shift-sel-${shiftOf(u)}" data-shift-select="${u.uid}" title="Shift">
+        ${Object.entries(SHIFT_LABEL).map(([v, l]) => `<option value="${v}"${shiftOf(u) === v ? ' selected' : ''}>${l} shift</option>`).join('')}
       </select>`;
     const dept = deptOf(u);
     const deptSel = `<select class="small-select dept-select" data-dept-select="${u.uid}" title="Department">
@@ -275,7 +313,7 @@ function renderMembers() {
         <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
         <small>${esc(u.email)}</small>
         ${u.empId ? `<small>${esc(u.empId)}</small>` : ''}
-        <div class="member-actions"><span class="pill role-${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}${deptSel}</div>
+        <div class="member-actions"><span class="pill role-${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}${deptSel}${shiftSel}</div>
       </div>
       ${delBtn}
     </div>`;
@@ -365,6 +403,7 @@ async function loadShared() {
   users = isAdmin() ? (await guard(() => store.listUsers())) || [] : [me];
   renderPolicy();
   $('#setStart').value = settings.start;
+  $('#setNightStart').value = settings.nightStart || '21:00';
   $('#setGrace').value = settings.grace;
 }
 
@@ -522,20 +561,21 @@ $$('.nav-item').forEach((b) => b.addEventListener('click', () => showTab(b.datas
 $('#btnIn').addEventListener('click', () => punch('in'));
 $('#btnOut').addEventListener('click', () => punch('out'));
 $('#dashDate').addEventListener('change', renderDashboard);
+$('#dashShift').addEventListener('change', renderDashboard);
 
 $('#btnExport').addEventListener('click', async () => {
   const date = $('#dashDate').value || dayKey();
   const logs = await guard(() => store.attendanceByDate(date));
   if (!logs) return;
-  const byUid = new Map(logs.map((l) => [l.uid, l]));
-  const rows = [...users].sort((a, b) => a.name.localeCompare(b.name)).map((u) => {
-    const l = byUid.get(u.uid), loc = l?.loc;
-    return [date, u.name, u.email, u.empId, u.dept, l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
+  const f = $('#dashShift').value;
+  const rows = dashRoster(logs).sort((a, b) => a.u.name.localeCompare(b.u.name)).map(({ u, rec: l, shift }) => {
+    const loc = l?.loc;
+    return [date, u.name, u.email, u.empId, deptOf(u), shift === 'night' ? 'Night' : 'Day', l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
       l ? (l.late ? 'Late' : 'On time') : 'Absent', l?.late ? l.lateBy : '',
       loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
   });
-  downloadCsv(`kosha-lab-attendance-${date}.csv`,
-    ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
+  downloadCsv(`kosha-lab-attendance-${date}${f === 'all' ? '' : `-${f}-shift`}.csv`,
+    ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Shift', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
   toast(`Exported ${rows.length} member${rows.length === 1 ? '' : 's'} for ${niceDate(date)}`);
 });
 
@@ -568,7 +608,7 @@ $('#memberForm').addEventListener('submit', async (e) => {
   const name = $('#mName').value.trim();
   const ok = await guard(async () => {
     if ($('#mRole').value === 'operator' && $('#mDept').value !== 'Operations') throw new Error('Operators must be in the Operations department.');
-    await store.createMember({ name, email: $('#mEmail').value, empId: $('#mId').value.trim(), dept: $('#mDept').value, role: $('#mRole').value }, $('#mPass').value);
+    await store.createMember({ name, email: $('#mEmail').value, empId: $('#mId').value.trim(), dept: $('#mDept').value, role: $('#mRole').value, shift: $('#mShift').value }, $('#mPass').value);
     return true;
   }, $('#memberErr'));
   btn.disabled = false;
@@ -610,7 +650,12 @@ async function changeMember(u, patch, msg) {
 $('#memberList').addEventListener('change', async (e) => {
   const roleSel = e.target.closest('[data-role-select]');
   const deptSel = e.target.closest('[data-dept-select]');
-  if (roleSel) {
+  const shiftSel = e.target.closest('[data-shift-select]');
+  if (shiftSel) {
+    const u = userById(shiftSel.dataset.shiftSelect), to = shiftSel.value;
+    await changeMember(u, { shift: to }, `${u.name} is now on ${SHIFT_LABEL[to]} shift`);
+    if (u.uid === me.uid) renderPolicy();
+  } else if (roleSel) {
     const u = userById(roleSel.dataset.roleSelect), to = roleSel.value;
     if (!confirm(ROLE_CONFIRM[to](u.name, deptOf(u)))) return renderMembers();
     const patch = to === 'operator' ? { role: to, dept: 'Operations' } : { role: to };
@@ -624,6 +669,29 @@ $('#memberList').addEventListener('change', async (e) => {
     }
     await changeMember(u, patch, `${u.name} moved to ${to || 'no department'}`);
   }
+});
+
+// Rotate: everyone on Day moves to Night and vice versa.
+$('#btnRotate').addEventListener('click', async () => {
+  const day = users.filter((u) => shiftOf(u) === 'day').length, night = users.length - day;
+  if (!users.length) return;
+  if (!confirm(`Rotate shifts for all ${users.length} people?\n\n${day} on Day shift → Night\n${night} on Night shift → Day\n\nPast attendance keeps the shift it was recorded on.`)) return;
+  const btn = $('#btnRotate');
+  btn.disabled = true;
+  const ok = await guard(async () => {
+    await Promise.all(users.map((u) => store.updateUser(u.uid, { shift: shiftOf(u) === 'day' ? 'night' : 'day' })));
+    const lastRotation = { at: Date.now(), by: me.name };
+    await store.saveSettings({ lastRotation });
+    settings.lastRotation = lastRotation;
+    return true;
+  });
+  btn.disabled = false;
+  users = (await guard(() => store.listUsers())) || users;
+  const mine = userById(me.uid);
+  if (mine) me.shift = mine.shift;
+  renderPolicy();
+  renderMembers();
+  if (ok) toast('Shifts rotated');
 });
 
 // Picking Operator in the add form puts the new member in Operations.
@@ -986,7 +1054,7 @@ DEV_FORMS.damages.clear();
 
 // Settings
 $('#btnSave').addEventListener('click', async () => {
-  const v = { start: $('#setStart').value || '09:30', grace: Math.max(0, parseInt($('#setGrace').value, 10) || 0) };
+  const v = { start: $('#setStart').value || '09:30', nightStart: $('#setNightStart').value || '21:00', grace: Math.max(0, parseInt($('#setGrace').value, 10) || 0) };
   if (await guard(async () => { await store.saveSettings(v); return true; })) { settings = { ...settings, ...v }; renderPolicy(); toast('Settings saved'); }
 });
 $('#btnWipe').addEventListener('click', async () => {
