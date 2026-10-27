@@ -240,6 +240,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .stats.three { grid-template-columns: repeat(3, 1fr); }
 .laptop-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: end; }
 .laptop-form .wide { grid-column: span 2; }
+.head-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.card-head { gap: 12px; flex-wrap: wrap; }
 .small-select { width: auto; padding: 7px 10px; font-size: 13px; }
 .table-wrap table { min-width: 680px; }
 td.mono, td.nowrap { white-space: nowrap; }

@@ -278,6 +278,30 @@ const LP_PILL = {
   returned: ['ontime', 'Returned'], rejected: ['muted-pill', 'Rejected'],
 };
 
+const lpFilterValue = () => (isAdmin() ? $('#lpFilter').value : 'all');
+const lpMatches = (r, f) => f === 'all' || (f === 'out' ? ['out', 'overdue'].includes(lpState(r)) : lpState(r) === f);
+
+async function exportLaptops() {
+  const list = await guard(() => store.listLaptops(isAdmin() ? null : me.uid));
+  if (!list) return;
+  const f = lpFilterValue();
+  const d = (ts) => (ts ? niceDate(dayKey(new Date(ts))) : '');
+  const t = (ts) => (ts ? hm(ts) : '');
+  const rows = list.filter((r) => lpMatches(r, f)).sort((a, b) => b.createdAt - a.createdAt).map((r) => {
+    const u = userById(r.uid);
+    const decided = ['approved', 'rejected', 'returned'].includes(r.status);
+    return [u?.name || r.name, u?.email, u?.empId, u?.dept, r.asset, r.reason,
+      d(r.createdAt), t(r.createdAt), niceDate(r.takeOn), niceDate(r.returnBy), LP_PILL[lpState(r)][1],
+      decided ? r.decidedByName : '', decided ? d(r.decidedAt) : '', decided ? t(r.decidedAt) : '',
+      d(r.returnedAt), t(r.returnedAt)];
+  });
+  const label = f === 'all' ? 'all' : $('#lpFilter').selectedOptions[0].text.toLowerCase().replace(/\s+/g, '-');
+  downloadCsv(`kosha-lab-laptops-${label}-${dayKey()}.csv`,
+    ['Name', 'Email', 'Employee ID', 'Department', 'Laptop ID', 'Reason', 'Requested date', 'Requested time',
+      'Taking home on', 'Return by', 'Status', 'Approved / rejected by', 'Decision date', 'Decision time', 'Returned date', 'Returned time'], rows);
+  toast(`Exported ${rows.length} laptop request${rows.length === 1 ? '' : 's'}`);
+}
+
 async function renderLaptops() {
   const list = await guard(() => store.listLaptops(isAdmin() ? null : me.uid));
   if (!list) return;
@@ -288,8 +312,8 @@ async function renderLaptops() {
   $('#lpOverdue').textContent = states.filter((s) => s === 'overdue').length;
   $('#lpTitle').textContent = isAdmin() ? 'All laptop requests' : 'My laptop requests';
 
-  const f = isAdmin() ? $('#lpFilter').value : 'all';
-  const rows = list.filter((r) => f === 'all' || (f === 'out' ? ['out', 'overdue'].includes(lpState(r)) : lpState(r) === f));
+  const f = lpFilterValue();
+  const rows = list.filter((r) => lpMatches(r, f));
   const cols = isAdmin() ? 6 : 4;
   $('#lpBody').innerHTML = rows.length ? rows.map((r) => {
     const st = lpState(r), [cls, label] = LP_PILL[st];
@@ -487,23 +511,28 @@ $('#btnExport').addEventListener('click', async () => {
   const logs = await guard(() => store.attendanceByDate(date));
   if (!logs) return;
   const byUid = new Map(logs.map((l) => [l.uid, l]));
-  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'].join(',')];
-  [...users].sort((a, b) => a.name.localeCompare(b.name)).forEach((u) => {
+  const rows = [...users].sort((a, b) => a.name.localeCompare(b.name)).map((u) => {
     const l = byUid.get(u.uid), loc = l?.loc;
-    lines.push([date, u.name, u.email, u.empId, u.dept, l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
+    return [date, u.name, u.email, u.empId, u.dept, l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
       l ? (l.late ? 'Late' : 'On time') : 'Absent', l?.late ? l.lateBy : '',
-      loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''].map(q).join(','));
+      loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
   });
-  // The BOM makes Excel read the file as UTF-8 so addresses keep their characters.
-  const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: `kosha-lab-attendance-${date}.csv` });
+  downloadCsv(`kosha-lab-attendance-${date}.csv`,
+    ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
+  toast(`Exported ${rows.length} member${rows.length === 1 ? '' : 's'} for ${niceDate(date)}`);
+});
+
+function downloadCsv(filename, header, rows) {
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const text = [header, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
+  // The BOM makes Excel read the file as UTF-8 so names and addresses keep their characters.
+  const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast(`Exported ${users.length} member${users.length === 1 ? '' : 's'} for ${niceDate(date)}`);
-});
+}
 
 document.addEventListener('click', (e) => {
   const id = e.target.closest('[data-map]')?.dataset.map;
@@ -571,6 +600,7 @@ $('#laptopForm').addEventListener('submit', async (e) => {
 });
 
 $('#lpFilter').addEventListener('change', renderLaptops);
+$('#btnExportLaptops').addEventListener('click', exportLaptops);
 $('#lpBody').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-lp]');
   if (!b) return;
