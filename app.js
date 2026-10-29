@@ -218,9 +218,11 @@ async function punch(kind) {
 const LEAVE_TYPES = { week_off: 'Week off', casual: 'Casual leave', sick: 'Sick leave', paid: 'Paid leave' };
 const LEAVE_CODE = { week_off: 'WO', casual: 'CL', sick: 'SL', paid: 'PL' };
 const MARKS = { present: 'Present', absent: 'Absent', ...LEAVE_TYPES };
+// IT has flexible hours, so their check-ins are never late, including ones saved before that rule.
+const isLate = (r) => !!r?.late && deptOf(userById(r.uid) || (r.uid === me?.uid ? me : null)) !== 'IT';
 function dayStatus(r, leave) {
   if (r?.mark) return r.mark;
-  if (r?.inTs) return r.late ? 'late' : 'present';
+  if (r?.inTs) return isLate(r) ? 'late' : 'present';
   return leave ? leave.type : 'absent';
 }
 const isPresent = (st) => st === 'present' || st === 'late';
@@ -272,7 +274,7 @@ async function myRecords() {
 
 async function renderRecent() {
   const recs = (await guard(myRecords) || []).filter((r) => r.inTs);
-  const events = recs.flatMap((r) => [{ t: r.inTs, label: r.late ? 'Late in' : 'In', cls: r.late ? 'late' : 'ontime', date: r.date }, ...(r.outTs ? [{ t: r.outTs, label: 'Out', cls: 'ontime', date: r.date }] : [])])
+  const events = recs.flatMap((r) => [{ t: r.inTs, label: isLate(r) ? 'Late in' : 'In', cls: isLate(r) ? 'late' : 'ontime', date: r.date }, ...(r.outTs ? [{ t: r.outTs, label: 'Out', cls: 'ontime', date: r.date }] : [])])
     .sort((a, b) => b.t - a.t).slice(0, 6);
   $('#recentList').innerHTML = events.length
     ? events.map((e) => `<li><span><span class="pill ${e.cls}">${e.label}</span></span><span class="t">${e.date.slice(5)} ${hm(e.t)}</span></li>`).join('')
@@ -332,7 +334,7 @@ async function renderDashboard() {
   $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody matches these filters.' : 'No members yet.'}</td></tr>`;
 
   const counts = users.filter(inDashDept).map((u) => {
-    const ls = (late || []).filter((l) => l.uid === u.uid);
+    const ls = (late || []).filter((l) => l.uid === u.uid && isLate(l));
     return { u, n: ls.length, mins: ls.reduce((s, l) => s + (l.lateBy || 0), 0) };
   }).filter((x) => x.n).sort((a, b) => b.n - a.n || b.mins - a.mins);
   const max = counts[0]?.n || 1;
