@@ -497,3 +497,26 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .late-box textarea { border-color: var(--danger-line); }
 .late-box span { color: var(--danger); }
 .late-reason { display: block; margin-top: 4px; max-width: 260px; font-size: 12px; color: var(--muted); font-style: italic; white-space: normal; }
+
+/* Extra items on deployments */
+.extras { display: grid; gap: 8px; }
+.extra-row { display: grid; grid-template-columns: 150px 140px 1fr; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.extra-row.missing { border-color: var(--danger-line); background: var(--danger-soft); }
+.extra-label { font-size: 14px; font-weight: 500; color: var(--text); }
+.seg.yn .seg-btn { padding: 5px 10px; font-size: 13px; }
+.seg.yn .seg-btn[data-yn="yes"].active { color: var(--success); }
+.seg.yn .seg-btn[data-yn="no"].active { color: var(--text-2); }
+.extra-nums { display: flex; gap: 10px; flex-wrap: wrap; }
+.extra-nums .count { width: 110px; flex-direction: row; align-items: center; gap: 8px; }
+.extra-nums .count span { white-space: nowrap; }
+.extra-nums .count input { padding: 6px 8px; font-size: 14px; }
+.others { display: grid; gap: 8px; }
+.others:empty { display: none; }
+.other-row { display: grid; grid-template-columns: 1.3fr 1.3fr 110px auto; gap: 8px; align-items: center; }
+.pill.extra { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
+.extra-sum { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+@media (max-width: 900px) {
+  .extra-row { grid-template-columns: 1fr auto; }
+  .extra-nums { grid-column: 1 / -1; }
+  .other-row { grid-template-columns: 1fr 1fr; }
+}

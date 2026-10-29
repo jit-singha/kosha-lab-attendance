@@ -402,6 +402,7 @@
                 </tbody>
               </table>
             </div>
+            <div id="extraSum" class="extra-sum"></div>
           </div>
 
           <div class="card">
@@ -431,6 +432,11 @@
                 <label class="field"><span>Taken by (operator)</span><input id="depBy" list="operatorNames" placeholder="Name of the operator" autocomplete="off" required></label>
                 <label class="field"><span>Notes (optional)</span><input id="depNotes" placeholder="e.g. Installed on poles 4–9"></label>
                 <div class="field full"><span>Devices taken for deployment</span><div id="depCounts" class="count-grid"></div></div>
+                <div class="field full"><span>Extra items taken — answer Yes or No for each</span><div id="depExtras" class="extras"></div></div>
+                <div class="field full"><span>Other items (optional)</span>
+                  <div id="depOthers" class="others"></div>
+                  <div><button id="addOther" type="button" class="btn btn-ghost btn-small">+ Add other item</button></div>
+                </div>
                 <label class="field wide"><span>Deployment location</span>
                   <div class="input-row">
                     <input id="depLoc" placeholder="e.g. Sector 21 substation, Jaipur" required>
@@ -450,7 +456,7 @@
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>Date</th><th>Taken by</th><th>Devices</th><th>Total</th><th>Location</th><th>Notes</th><th></th></tr></thead>
+                  <thead><tr><th>Date</th><th>Taken by</th><th>Devices</th><th>Total</th><th>Extra items</th><th>Location</th><th>Notes</th><th></th></tr></thead>
                   <tbody id="depBody"></tbody>
                 </table>
               </div>

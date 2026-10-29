@@ -32,6 +32,12 @@ service cloud.firestore {
         && cnt(d, '03W') >= 0 && cnt(d, 'Pi') >= 0 && cnt(d, 'Cubic') >= 0
         && cnt(d, '03W') + cnt(d, 'Pi') + cnt(d, 'Cubic') > 0;
     }
+    // Extra items on a deployment: { sd, flood, power, otg, samsung, oppo } counts, plus up to 20 other items.
+    function validExtras(d) {
+      return d.get('extras', {}) is map
+        && d.get('extras', {}).keys().hasOnly(['sd', 'flood', 'power', 'otg', 'samsung', 'oppo'])
+        && d.get('others', []) is list && d.get('others', []).size() <= 20;
+    }
     function nearNow(ts) { return ts is int && ts > request.time.toMillis() - 300000 && ts < request.time.toMillis() + 300000; }
 
     // Profiles. People create their own profile only as a "member", choosing their department once and
@@ -102,8 +108,8 @@ service cloud.firestore {
     // Operations members add their own and can edit or delete only their own; admins can change any; IT only views.
     match /deployments/{id} {
       allow read: if canViewDevices();
-      allow create: if isOperator() && validDevice(request.resource.data);
-      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data));
+      allow create: if isOperator() && validDevice(request.resource.data) && validExtras(request.resource.data);
+      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data) && validExtras(request.resource.data));
       allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);
     }
     match /damages/{id} {

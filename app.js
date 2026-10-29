@@ -1112,14 +1112,103 @@ function fillCounts(box, counts = {}) {
 buildCounts($('#depCounts'));
 buildCounts($('#dmgCounts'));
 
+// Extra items taken on a deployment. Each question is answered Yes or No; Yes asks for the numbers.
+const EXTRA_ITEMS = [
+  { key: 'sd', label: 'Extra SD cards', fields: [['sd', 'How many']] },
+  { key: 'flood', label: 'Flood lights', fields: [['flood', 'How many']] },
+  { key: 'power', label: 'Power cables', fields: [['power', 'How many']] },
+  { key: 'otg', label: 'OTG', fields: [['otg', 'How many']] },
+  { key: 'phone', label: 'Phones', fields: [['samsung', 'Samsung'], ['oppo', 'Oppo']] },
+];
+const EXTRA_LABEL = { sd: 'SD cards', flood: 'Flood lights', power: 'Power cables', otg: 'OTG', samsung: 'Samsung phones', oppo: 'Oppo phones' };
+const EXTRA_KEYS = Object.keys(EXTRA_LABEL);
+const othersText = (r) => (r.others || []).map((o) => `${o.item}${o.type ? ` (${o.type})` : ''} × ${o.qty}`).join('; ');
+const extraChips = (r) => [
+  ...EXTRA_KEYS.filter((k) => r.extras?.[k] > 0).map((k) => `<span class="pill extra">${EXTRA_LABEL[k]} × ${r.extras[k]}</span>`),
+  ...(r.others || []).map((o) => `<span class="pill extra">${esc(o.item)}${o.type ? ` (${esc(o.type)})` : ''} × ${o.qty}</span>`),
+].join(' ') || '<span class="muted">None</span>';
+
+$('#depExtras').innerHTML = EXTRA_ITEMS.map((x) => `<div class="extra-row" data-extra="${x.key}" data-answer="">
+    <span class="extra-label">${x.label}</span>
+    <div class="seg yn"><button type="button" class="seg-btn" data-yn="no">No</button><button type="button" class="seg-btn" data-yn="yes">Yes</button></div>
+    <div class="extra-nums" hidden>${x.fields.map(([k, l]) => `<label class="count"><span>${l}</span><input type="number" min="0" step="1" inputmode="numeric" placeholder="0" data-extra-field="${k}"></label>`).join('')}</div>
+  </div>`).join('');
+
+function setAnswer(row, a) {
+  row.dataset.answer = a;
+  row.querySelectorAll('[data-yn]').forEach((b) => b.classList.toggle('active', b.dataset.yn === a));
+  row.querySelector('.extra-nums').hidden = a !== 'yes';
+  row.classList.remove('missing');
+  if (a !== 'yes') row.querySelectorAll('input').forEach((i) => { i.value = ''; });
+}
+$('#depExtras').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-yn]');
+  if (!b) return;
+  const row = b.closest('.extra-row');
+  setAnswer(row, b.dataset.yn);
+  if (b.dataset.yn === 'yes') row.querySelector('input').focus();
+});
+
+function addOtherRow(o = {}) {
+  const row = document.createElement('div');
+  row.className = 'other-row';
+  row.innerHTML = `<input data-o="item" placeholder="Item (e.g. Battery)" maxlength="60" value="${esc(o.item || '')}">
+    <input data-o="type" placeholder="Type / model (e.g. 12V 7Ah)" maxlength="60" value="${esc(o.type || '')}">
+    <input data-o="qty" type="number" min="1" step="1" inputmode="numeric" placeholder="Number" value="${o.qty || ''}">
+    <button type="button" class="del" data-o-del title="Remove item" aria-label="Remove item">${icon('x')}</button>`;
+  $('#depOthers').append(row);
+  return row;
+}
+$('#addOther').addEventListener('click', () => addOtherRow().querySelector('input').focus());
+$('#depOthers').addEventListener('click', (e) => { if (e.target.closest('[data-o-del]')) e.target.closest('.other-row').remove(); });
+
+function readExtras() {
+  const extras = {};
+  for (const row of $$('#depExtras .extra-row')) {
+    const label = row.querySelector('.extra-label').textContent;
+    if (!row.dataset.answer) { row.classList.add('missing'); return { error: `Answer Yes or No for "${label}".` }; }
+    if (row.dataset.answer !== 'yes') continue;
+    let sum = 0;
+    for (const i of row.querySelectorAll('[data-extra-field]')) {
+      const v = i.value.trim() === '' ? 0 : Number(i.value);
+      if (!Number.isInteger(v) || v < 0) return { error: `${label}: numbers must be whole numbers.` };
+      if (v) extras[i.dataset.extraField] = v;
+      sum += v;
+    }
+    if (!sum) { row.classList.add('missing'); return { error: `${label}: you said Yes, so enter how many were taken.` }; }
+  }
+  const others = [];
+  for (const row of $$('#depOthers .other-row')) {
+    const get = (k) => row.querySelector(`[data-o="${k}"]`).value.trim();
+    const item = get('item'), type = get('type'), qtyS = get('qty');
+    if (!item && !type && !qtyS) continue;
+    const qty = Number(qtyS);
+    if (!item) return { error: 'Other items: enter the name of the item.' };
+    if (!Number.isInteger(qty) || qty < 1) return { error: `Other items: enter how many "${item}" were taken.` };
+    others.push({ item, type, qty });
+  }
+  return { extras, others };
+}
+function fillExtras(r) {
+  $$('#depExtras .extra-row').forEach((row) => {
+    if (!r) return setAnswer(row, '');
+    const fields = [...row.querySelectorAll('[data-extra-field]')];
+    const yes = fields.some((i) => r.extras?.[i.dataset.extraField] > 0);
+    setAnswer(row, yes ? 'yes' : 'no');
+    fields.forEach((i) => { i.value = r.extras?.[i.dataset.extraField] || ''; });
+  });
+  $('#depOthers').innerHTML = '';
+  (r?.others || []).forEach((o) => addOtherRow(o));
+}
+
 const DEV_FORMS = {
   deployments: {
     title: '#depFormTitle', titles: ['Log a deployment', 'Edit deployment'],
     submit: '#depSubmit', submits: ['Add deployment', 'Save changes'], cancel: '#depCancel', counts: '#depCounts',
     by: '#depBy',
     read: () => ({ date: $('#depDate').value, takenBy: canonName($('#depBy').value), location: $('#depLoc').value.trim(), notes: $('#depNotes').value.trim(), geo: depGeo }),
-    fill: (r) => { $('#depDate').value = r.date; $('#depBy').value = takenOf(r); fillCounts($('#depCounts'), countsOf(r)); $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
-    clear: () => { $('#depForm').reset(); fillCounts($('#depCounts')); $('#depDate').value = devScopeDate(); $('#depBy').value = me?.name || ''; depGeo = null; },
+    fill: (r) => { $('#depDate').value = r.date; $('#depBy').value = takenOf(r); fillCounts($('#depCounts'), countsOf(r)); fillExtras(r); $('#depLoc').value = r.location; $('#depNotes').value = r.notes || ''; depGeo = r.geo || null; },
+    clear: () => { $('#depForm').reset(); fillCounts($('#depCounts')); fillExtras(null); $('#depDate').value = devScopeDate(); $('#depBy').value = me?.name || ''; depGeo = null; },
   },
   damages: {
     title: '#dmgFormTitle', titles: ['Report damaged devices', 'Edit damage report'],
@@ -1193,6 +1282,15 @@ function renderDevices() {
     $(`[data-sum="${c}:total"]`).textContent = total;
   }
 
+  // Extra items taken across the deployments in view.
+  const xt = {}, ot = new Map();
+  for (const r of scoped.deployments) {
+    EXTRA_KEYS.forEach((k) => { if (r.extras?.[k]) xt[k] = (xt[k] || 0) + r.extras[k]; });
+    (r.others || []).forEach((o) => { const name = o.type ? `${o.item} (${o.type})` : o.item, key = name.toLowerCase(); ot.set(key, { name: ot.get(key)?.name || name, n: (ot.get(key)?.n || 0) + o.qty }); });
+  }
+  const chips = [...EXTRA_KEYS.filter((k) => xt[k]).map((k) => `<span class="pill extra">${EXTRA_LABEL[k]} × ${xt[k]}</span>`), ...[...ot.values()].map((o) => `<span class="pill extra">${esc(o.name)} × ${o.n}</span>`)];
+  $('#extraSum').innerHTML = `<span class="muted small">Extra items taken:</span> ${chips.join(' ') || '<span class="muted small">none</span>'}`;
+
   renderOperatorSummary(scoped);
 
   const dep = scoped.deployments.sort(byNewest);
@@ -1201,10 +1299,11 @@ function renderDevices() {
       <td>${operatorCell(r)}</td>
       <td class="chips">${deviceChips(r)}</td>
       <td class="mono">${totalOf(r)}</td>
+      <td class="chips">${extraChips(r)}</td>
       <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
       <td class="reason">${esc(r.notes || '')}</td>
       <td class="actions">${recActions('deployments', r)}</td>
-    </tr>`).join('') : `<tr><td colspan="7" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="8" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 
   const dmg = scoped.damages.sort(byNewest);
   $('#dmgBody').innerHTML = dmg.length ? dmg.map((r) => {
@@ -1279,6 +1378,11 @@ async function saveDevRecord(c) {
   const data = { ...DEV_FORMS[c].read(), counts, qty: total };
   if (!data.date) return toast('Please pick a date.');
   if (!data.takenBy) return toast('Please enter the name of the operator.');
+  if (c === 'deployments') {
+    const x = readExtras();
+    if (x.error) return toast(x.error);
+    Object.assign(data, { extras: x.extras, others: x.others });
+  }
   const id = devEditing[c];
   const ok = await guard(async () => {
     if (id) await store.updateRecord(c, id, { ...data, updatedAt: Date.now(), updatedBy: me.uid, updatedByName: me.name });
@@ -1353,10 +1457,11 @@ $('#dmgBody').addEventListener('change', async (e) => {
 $('#btnExportDep').addEventListener('click', () => {
   const rows = devData.deployments.filter(inDevScope).sort(byNewest).map((r) => [
     niceDate(r.date), takenOf(r), ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
+    ...EXTRA_KEYS.map((k) => r.extras?.[k] || 0), othersText(r),
     r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
     r.notes, r.name, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-deployments-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Taken by (operator)', ...DEVICE_TYPES, 'Total devices', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged by', 'Logged at', 'Last edited at', 'Last edited by'], rows);
+    ['Date', 'Taken by (operator)', ...DEVICE_TYPES, 'Total devices', ...EXTRA_KEYS.map((k) => EXTRA_LABEL[k]), 'Other items', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged by', 'Logged at', 'Last edited at', 'Last edited by'], rows);
   toast(`Exported ${rows.length} deployment record${rows.length === 1 ? '' : 's'}`);
 });
 
