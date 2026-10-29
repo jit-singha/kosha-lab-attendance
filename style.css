@@ -299,7 +299,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .auth { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
 .auth-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 20px; padding: 32px; margin: 0; box-shadow: var(--shadow-lg); }
 .auth-card .logo { padding: 0; }
-.auth-card .credit { margin-top: 0; }
 .auth-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.3px; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
 .seg-btn { all: unset; cursor: pointer; text-align: center; padding: 7px 10px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -389,8 +388,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .profile-actions.left { justify-content: flex-start; margin-top: 10px; }
 
 .credit { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.credit b { font-weight: 600; color: var(--text-2); }
-
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 16px); opacity: 0; z-index: 30;
   padding: 10px 16px; border-radius: var(--radius-sm); background: #101828; color: #fff; max-width: calc(100vw - 32px);
