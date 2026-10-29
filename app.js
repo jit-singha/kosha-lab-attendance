@@ -173,6 +173,14 @@ async function punch(kind) {
     }
   } catch (e) { return setStatus(esc(e.message), 'err'); }
 
+  // Late check-ins need a reason.
+  const lateReason = $('#lateReason').value.trim();
+  if (kind === 'in' && shiftTiming(Date.now(), shift).late && !lateReason) {
+    $('#lateBox').hidden = false;
+    $('#lateReason').focus();
+    return setStatus("You're checking in late — please type the reason above, then press Check In again.", 'err');
+  }
+
   $('#btnIn').disabled = $('#btnOut').disabled = true;
   setStatus('Getting precise location…');
   try {
@@ -180,7 +188,8 @@ async function punch(kind) {
     const now = Date.now();
     if (kind === 'in') {
       const { late, lateBy, date } = shiftTiming(now, shift);
-      await store.saveAttendance({ id, uid: me.uid, name: me.name, date, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc });
+      await store.saveAttendance({ id, uid: me.uid, name: me.name, date, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc, ...(late ? { lateReason } : {}) });
+      $('#lateReason').value = '';
       const where = ` from <b>${esc(loc.place || coords(loc))}</b> <span class="muted">(${coords(loc)}, ±${loc.acc} m)</span>`;
       setStatus(late
         ? `Checked in at <b>${hm(now)}</b>${where} — <b>late by ${fmtLate(lateBy)}</b>.`
@@ -215,7 +224,7 @@ const statusLabel = (st, r) => (st === 'late' ? 'Late' : st === 'present' ? (r?.
 function statusPill(r, leave) {
   const st = dayStatus(r, leave);
   const by = r?.mark ? `<small class="coords">Marked by ${esc(r.markedByName || 'HR')}</small>` : '';
-  if (st === 'late') return `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>`;
+  if (st === 'late') return `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>${r.lateReason ? `<small class="late-reason">“${esc(r.lateReason)}”</small>` : ''}`;
   const cls = st === 'present' ? 'ontime' : st === 'absent' ? 'absent' : 'leave';
   return `<span class="pill ${cls}">${statusLabel(st, r)}</span>${by}`;
 }
@@ -649,13 +658,13 @@ $('#btnExport').addEventListener('click', async () => {
   const rows = dashRoster(logs).sort((a, b) => a.u.name.localeCompare(b.u.name)).map(({ u, rec: l, shift }) => {
     const loc = l?.loc, st = dayStatus(l, leaveOn(u.uid, date));
     return [date, u.name, u.email, u.empId, deptOf(u), shift === 'night' ? 'Night' : 'Day', l?.inTs ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
-      statusLabel(st, l), st === 'late' ? l.lateBy : '',
+      statusLabel(st, l), st === 'late' ? l.lateBy : '', st === 'late' ? l.lateReason : '',
       loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
   });
   const d = $('#dashDept').value;
   const deptPart = d === 'all' ? '' : `-${(d === 'none' ? 'no-department' : d).toLowerCase().replace(/\s+/g, '-')}`;
   downloadCsv(`kosha-lab-attendance-${date}${deptPart}${f === 'all' ? '' : `-${f}-shift`}.csv`,
-    ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Shift', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
+    ['Date', 'Name', 'Email', 'Employee ID', 'Department', 'Shift', 'Check in', 'Check out', 'Status', 'Late by (min)', 'Late reason', 'Address', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps'], rows);
   toast(`Exported ${rows.length} member${rows.length === 1 ? '' : 's'} for ${niceDate(date)}`);
 });
 
@@ -1380,6 +1389,8 @@ function tick() {
   const d = new Date();
   $('#clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   $('#ringTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // Show the late-reason box once it's past the late cutoff for this person's shift.
+  if (me) $('#lateBox').hidden = !shiftTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value;
   $('#date').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 setInterval(tick, 1000); tick();

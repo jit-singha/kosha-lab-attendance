@@ -63,7 +63,8 @@ service cloud.firestore {
       allow read: if isHR() || (isMember() && resource.data.uid == request.auth.uid);
       allow create: if (isMember() && request.resource.data.uid == request.auth.uid
           && id == request.auth.uid + '_' + request.resource.data.date
-          && nearNow(request.resource.data.inTs))
+          && nearNow(request.resource.data.inTs)
+          && request.resource.data.get('lateReason', '') is string && request.resource.data.get('lateReason', '').size() <= 300)
         || (hrFor(request.resource.data.uid) && validMark()
           && id == request.resource.data.uid + '_' + request.resource.data.date
           && request.resource.data.keys().hasOnly(['id', 'uid', 'name', 'date', 'shift', 'mark', 'markedBy', 'markedByName', 'markedAt']));

@@ -5,8 +5,8 @@ A clean, professional daily attendance web app for Kosha Lab, with light and dar
 ## Features
 - **Accounts & admin access**: everyone signs in with email and password. Admins can add members, give or remove admin access, and remove people. The owner account is always an admin.
 - **Check in / check out**: each person checks themselves in, with a live clock.
-- **Late login detection**: configurable shift start time and grace period; shows how many minutes late.
-- **Day and night shifts**: separate start times for each shift; members choose Day or Night on the Check In page (remembered for next time), and admins can also rotate everyone Day ↔ Night with one click (or change people individually). Night-shift check-ins and check-outs after midnight count towards the night the shift started. The Dashboard filters by department and shift, and each check-in records the shift it was worked on.
+- **Late login detection**: configurable shift start time and grace period; shows how many minutes late. Anyone checking in late types a reason, which shows next to their Late status for HR and admins and in the CSV export.
+- **Day and night shifts**: separate start times for each shift; members choose Day or Night on the Check In page (remembered for next time), and admins can also rotate everyone Day â†” Night with one click (or change people individually). Night-shift check-ins and check-outs after midnight count towards the night the shift started. The Dashboard filters by department and shift, and each check-in records the shift it was worked on.
 - **Precise location capture**: GPS is required to check in. The app samples GPS until it gets an accurate fix, then records the full street address, exact coordinates (6 decimals) and accuracy in metres. Each entry opens on an embedded map with a pin, or in Google Maps.
 - **Laptop take-home log**: members request to take a laptop home (asset ID, dates, reason). Admins approve or reject, then mark it returned. Laptops not back by the return date show as **Overdue**.
 - **Roles and departments**: Member, Operator or Admin, and a department (Operations, IT, Data Analysis, HR, Finance). People choose their department when they create an account (existing accounts are asked once); after that only an admin can change it in **Team & Access**. Everyone in Operations can log devices; the optional Operator role is always in Operations.
@@ -21,11 +21,11 @@ While `firebase-config.js` is empty, the app runs in **demo mode**: everything i
 
 ## Set up Firebase (shared data across all devices)
 1. Go to <https://console.firebase.google.com>, then **Add project** and name it (e.g. `kosha-lab-attendance`). Google Analytics can be turned off.
-2. **Build → Authentication → Get started → Email/Password → Enable**.
-3. **Build → Firestore Database → Create database**, choose a region near you, and start in **production mode**.
+2. **Build â†’ Authentication â†’ Get started â†’ Email/Password â†’ Enable**.
+3. **Build â†’ Firestore Database â†’ Create database**, choose a region near you, and start in **production mode**.
 4. In Firestore, open the **Rules** tab, paste the contents of `firestore.rules`, replace `OWNER_EMAIL_HERE` with your email, then click **Publish**.
-5. **Project settings (gear) → Your apps → Web (`</>`)**. Register the app, then copy the `firebaseConfig` values into `firebase-config.js`. Set `OWNER_EMAIL` to the same email as in step 4.
-6. **Authentication → Settings → Authorized domains**: add `<your-github-username>.github.io`.
+5. **Project settings (gear) â†’ Your apps â†’ Web (`</>`)**. Register the app, then copy the `firebaseConfig` values into `firebase-config.js`. Set `OWNER_EMAIL` to the same email as in step 4.
+6. **Authentication â†’ Settings â†’ Authorized domains**: add `<your-github-username>.github.io`.
 7. Open the site and **create an account with the owner email**. That account is the admin. Add your team from **Team & Access**.
 
 > The Firebase web config is not a secret; it is safe in a public repo. Access is protected by the Firestore rules.
