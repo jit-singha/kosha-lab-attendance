@@ -520,3 +520,8 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
   .extra-nums { grid-column: 1 / -1; }
   .other-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* IT confirmation on deployments */
+.status-select.cf-sent { color: var(--info); }
+.status-select.cf-received { color: var(--success); }
+.status-select.cf-none { color: var(--muted); }

@@ -13,6 +13,12 @@ service cloud.firestore {
     // Everyone in Operations (and admins) logs devices and damage. The IT department can view them.
     function isOperator() { return isAdmin() || (isMember() && me().get('dept', '') == 'Operations'); }
     function canViewDevices() { return isOperator() || (isMember() && me().get('dept', '') == 'IT'); }
+    // IT marks deployments "confirmed & sent" or "confirmed & received"; it can't change anything else on them.
+    function isIT() { return isMember() && me().get('dept', '') == 'IT'; }
+    function confirmOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirm', 'confirmedBy', 'confirmedByName', 'confirmedAt'])
+        && request.resource.data.get('confirm', null) in [null, 'sent', 'received'];
+    }
     function validDept() { return request.resource.data.get('dept', '') in ['', 'Operations', 'IT', 'Data Analysis', 'HR', 'Finance']; }
     // People pick their department once (at sign-up, or later if it's empty); after that only admins change it.
     function deptOk() {
@@ -109,7 +115,8 @@ service cloud.firestore {
     match /deployments/{id} {
       allow read: if canViewDevices();
       allow create: if isOperator() && validDevice(request.resource.data) && validExtras(request.resource.data);
-      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data) && validExtras(request.resource.data));
+      allow update: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid && validDevice(request.resource.data) && validExtras(request.resource.data))
+        || (isIT() && confirmOnly());
       allow delete: if isAdmin() || (isOperator() && resource.data.uid == request.auth.uid);
     }
     match /damages/{id} {

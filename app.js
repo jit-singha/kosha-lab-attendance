@@ -1066,6 +1066,17 @@ let depGeo = null; // GPS fix attached to the deployment being entered
 let devFormsFor = null; // uid the device forms were last prepared for
 
 const canEditRec = (r) => isAdmin() || (isOperator() && r.uid === me.uid);
+// IT (and admins) confirm each deployment as sent out or received back.
+const canConfirm = () => isAdmin() || deptOf(me) === 'IT';
+const CONFIRM = { sent: ['info', 'Confirmed & sent'], received: ['ontime', 'Confirmed & received'] };
+function confirmCell(r) {
+  const by = r.confirm && r.confirmedByName ? `<small class="coords">by ${esc(r.confirmedByName)}${r.confirmedAt ? ` · ${stamp(r.confirmedAt)}` : ''}</small>` : '';
+  if (!canConfirm()) return r.confirm ? `<span class="pill ${CONFIRM[r.confirm][0]}">${CONFIRM[r.confirm][1]}</span>${by}` : '<span class="pill muted-pill">Not confirmed</span>';
+  return `<select class="small-select status-select cf-${r.confirm || 'none'}" data-confirm="${r.id}" title="IT confirmation">
+      <option value=""${r.confirm ? '' : ' selected'}>Not confirmed</option>
+      ${Object.entries(CONFIRM).map(([v, [, l]]) => `<option value="${v}"${r.confirm === v ? ' selected' : ''}>${l}</option>`).join('')}
+    </select>${by}`;
+}
 const devScopeDate = () => $('#devDate').value || dayKey();
 const inDevScope = (r) => $('#devAll').checked || r.date === devScopeDate();
 const byNewest = (a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0));
@@ -1302,8 +1313,9 @@ function renderDevices() {
       <td class="chips">${extraChips(r)}</td>
       <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
       <td class="reason">${esc(r.notes || '')}</td>
+      <td class="nowrap">${confirmCell(r)}</td>
       <td class="actions">${recActions('deployments', r)}</td>
-    </tr>`).join('') : `<tr><td colspan="8" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="9" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 
   const dmg = scoped.damages.sort(byNewest);
   $('#dmgBody').innerHTML = dmg.length ? dmg.map((r) => {
@@ -1442,6 +1454,18 @@ $('#tab-devices').addEventListener('click', async (e) => {
   }
 });
 
+$('#depBody').addEventListener('change', async (e) => {
+  const sel = e.target.closest('[data-confirm]');
+  if (!sel) return;
+  const r = devData.deployments.find((x) => x.id === sel.dataset.confirm);
+  const patch = { confirm: sel.value || null, confirmedBy: me.uid, confirmedByName: me.name, confirmedAt: Date.now() };
+  if (await guard(async () => { await store.updateRecord('deployments', r.id, patch); return true; })) {
+    Object.assign(r, patch);
+    toast(sel.value ? CONFIRM[sel.value][1] : 'Confirmation removed');
+  }
+  renderDevices();
+});
+
 $('#dmgBody').addEventListener('change', async (e) => {
   const sel = e.target.closest('[data-dmg-status]');
   if (!sel) return;
@@ -1459,9 +1483,10 @@ $('#btnExportDep').addEventListener('click', () => {
     niceDate(r.date), takenOf(r), ...DEVICE_TYPES.map((t) => countsOf(r)[t] || 0), totalOf(r),
     ...EXTRA_KEYS.map((k) => r.extras?.[k] || 0), othersText(r),
     r.location, r.geo?.lat, r.geo?.lng, r.geo?.acc, r.geo ? mapsUrl(r.geo) : '',
-    r.notes, r.name, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
+    r.notes, r.confirm ? CONFIRM[r.confirm][1] : 'Not confirmed', r.confirm ? r.confirmedByName : '', r.confirm ? stamp(r.confirmedAt) : '',
+    r.name, stamp(r.createdAt), stamp(r.updatedAt), r.updatedByName]);
   downloadCsv(`kosha-lab-deployments-${$('#devAll').checked ? 'all' : devScopeDate()}.csv`,
-    ['Date', 'Taken by (operator)', ...DEVICE_TYPES, 'Total devices', ...EXTRA_KEYS.map((k) => EXTRA_LABEL[k]), 'Other items', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'Logged by', 'Logged at', 'Last edited at', 'Last edited by'], rows);
+    ['Date', 'Taken by (operator)', ...DEVICE_TYPES, 'Total devices', ...EXTRA_KEYS.map((k) => EXTRA_LABEL[k]), 'Other items', 'Location', 'Latitude', 'Longitude', 'Accuracy (m)', 'Google Maps', 'Notes', 'IT confirmation', 'Confirmed by', 'Confirmed at', 'Logged by', 'Logged at', 'Last edited at', 'Last edited by'], rows);
   toast(`Exported ${rows.length} deployment record${rows.length === 1 ? '' : 's'}`);
 });
 
