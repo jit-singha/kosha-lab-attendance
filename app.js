@@ -28,7 +28,8 @@ const coords = (loc) => `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
 const hasPhoto = (u) => typeof u?.photo === 'string' && u.photo.startsWith('data:image/');
 const avatar = (u, cls = '') => hasPhoto(u)
   ? `<img class="av ${cls}" src="${esc(u.photo)}" alt="${esc(u.name)}">`
-  : `<div class="av ${cls}" style="background:${u?.color || '#8b5cff'}">${esc(initials(u?.name))}</div>`;
+  : `<div class="av ${cls}" style="--av:${u?.color || '#6366f1'}">${esc(initials(u?.name))}</div>`;
+const icon = (id) => `<svg class="icon"><use href="#i-${id}"/></svg>`;
 
 // Center-crop and shrink a picked image to a small JPEG data URL (kept in the user's profile).
 function resizePhoto(file, size = 192) {
@@ -205,7 +206,7 @@ function locCell(r) {
   if (!loc) return '<span class="muted">—</span>';
   const approx = loc.source === 'ip' || loc.precise === false;
   const acc = loc.acc != null ? `±${loc.acc} m` : 'IP based';
-  return `<button class="loc" data-map="${esc(r.id)}">📍 ${esc(loc.place || coords(loc))}</button>
+  return `<button class="loc" data-map="${esc(r.id)}">${esc(loc.place || coords(loc))}</button>
     <small class="coords">${coords(loc)} · <span class="${approx ? 'acc-bad' : 'acc-good'}">${approx ? 'approximate ' : ''}${acc}</span></small>`;
 }
 
@@ -325,9 +326,9 @@ function renderMembers() {
         <option value=""${dept ? '' : ' selected'}>No department</option>
         ${DEPTS.map((d) => `<option${dept === d ? ' selected' : ''}>${d}</option>`).join('')}
       </select>`;
-    const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member">✕</button>`;
+    const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member" aria-label="Remove member">${icon('x')}</button>`;
     return `<div class="card member">
-      <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">📷</span></button>
+      <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">${icon('camera')}</span></button>
       <div class="meta">
         <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
         <small>${esc(u.email)}</small>
@@ -583,6 +584,7 @@ $$('.seg-btn[data-auth]').forEach((b) => b.addEventListener('click', () => {
   $('#aName').required = $('#aDept').required = authMode === 'signup';
   $('#aPass').autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   $('#authBtn').textContent = authMode === 'signup' ? 'Create account' : 'Sign in';
+  $('#authTitle').textContent = authMode === 'signup' ? 'Create your account' : 'Welcome back';
   $('#authErr').textContent = '';
 }));
 
@@ -902,7 +904,7 @@ async function loadDevices() {
 
 function operatorCell(r) {
   const who = takenOf(r);
-  const u = userByName(who) || { name: who, color: '#5b8cff' };
+  const u = userByName(who) || { name: who, color: '#0ea5e9' };
   const notes = [];
   if (r.name && r.name.toLowerCase() !== who.toLowerCase()) notes.push(`logged by ${esc(r.name)}`);
   if (r.updatedByName && r.updatedByName !== r.name) notes.push(`edited by ${esc(r.updatedByName)}`);
@@ -910,7 +912,7 @@ function operatorCell(r) {
 }
 
 const recActions = (c, r) => (canEditRec(r)
-  ? `<button class="btn btn-xs btn-ghost" data-dev-edit="${c}:${r.id}">Edit</button><button class="del" data-dev-del="${c}:${r.id}" title="Delete">✕</button>`
+  ? `<button class="btn btn-xs btn-ghost" data-dev-edit="${c}:${r.id}">Edit</button><button class="del" data-dev-del="${c}:${r.id}" title="Delete" aria-label="Delete">${icon('x')}</button>`
   : '');
 
 function renderDevices() {
@@ -934,7 +936,7 @@ function renderDevices() {
       <td>${operatorCell(r)}</td>
       <td class="chips">${deviceChips(r)}</td>
       <td class="mono">${totalOf(r)}</td>
-      <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">📍 ${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
+      <td class="reason">${r.geo ? `<a class="loc" href="${mapsUrl(r.geo)}" target="_blank" rel="noopener">${esc(r.location)}</a><small class="coords">${coords(r.geo)} · ±${r.geo.acc} m</small>` : esc(r.location)}</td>
       <td class="reason">${esc(r.notes || '')}</td>
       <td class="actions">${recActions('deployments', r)}</td>
     </tr>`).join('') : `<tr><td colspan="7" class="empty">No deployments logged${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
@@ -983,7 +985,7 @@ function renderOperatorSummary(scoped) {
   const ops = operatorTotals(scoped);
   const cells = (m, total, cls) => DEVICE_TYPES.map((t) => `<td class="${cls}${m[t] ? '' : ' zero'}">${m[t] || 0}</td>`).join('') + `<td class="${cls} tot">${total}</td>`;
   $('#opSumBody').innerHTML = ops.length ? ops.map((o) => {
-    const u = userByName(o.name) || { name: o.name, color: '#5b8cff' };
+    const u = userByName(o.name) || { name: o.name, color: '#0ea5e9' };
     return `<tr><td><div class="who">${avatar(u)}<div>${esc(o.name)}</div></div></td>${cells(o.deployments, o.depTotal, 'dep')}${cells(o.damages, o.dmgTotal, 'dmg')}</tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">No records${$('#devAll').checked ? '' : ' for this date'}.</td></tr>`;
 }
@@ -1126,32 +1128,22 @@ function tick() {
 }
 setInterval(tick, 1000); tick();
 
-// ---------- Background: animated particle network ----------
-const cv = $('#bg'), ctx = cv.getContext('2d');
-let W, H, pts;
-function resize() {
-  W = cv.width = innerWidth; H = cv.height = innerHeight;
-  const n = Math.min(90, Math.floor((W * H) / 18000));
-  pts = Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35 }));
+// ---------- Theme ----------
+const THEME_KEY = 'koshalab.theme';
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => (document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light')) === 'dark';
+function paintThemeBtn() {
+  $('#themeBtn').innerHTML = icon(isDark() ? 'sun' : 'moon');
+  $('#themeBtn').title = isDark() ? 'Switch to light mode' : 'Switch to dark mode';
 }
-function frame() {
-  ctx.clearRect(0, 0, W, H);
-  for (const p of pts) {
-    p.x += p.vx; p.y += p.vy;
-    if (p.x < 0 || p.x > W) p.vx *= -1;
-    if (p.y < 0 || p.y > H) p.vy *= -1;
-  }
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const a = pts[i], b = pts[j], d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d < 140) { ctx.strokeStyle = `rgba(139,92,255,${(1 - d / 140) * .25})`; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
-    }
-    ctx.fillStyle = 'rgba(34,230,255,.7)';
-    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 1.6, 0, Math.PI * 2); ctx.fill();
-  }
-  requestAnimationFrame(frame);
-}
-addEventListener('resize', resize); resize(); frame();
+$('#themeBtn').addEventListener('click', () => {
+  const t = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+  paintThemeBtn();
+});
+darkQuery.addEventListener('change', paintThemeBtn);
+paintThemeBtn();
 
 // ---------- Boot ----------
 $('#dashDate').value = dayKey();

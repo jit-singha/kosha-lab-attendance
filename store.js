@@ -3,7 +3,7 @@
 import { firebaseConfig, OWNER_EMAIL } from './firebase-config.js';
 
 const DEFAULT_SETTINGS = { start: '09:30', nightStart: '21:00', grace: 10 };
-const COLORS = ['#22e6ff', '#8b5cff', '#ff3ea5', '#2bffa4', '#ffc53d', '#ff7a45', '#5b8cff'];
+const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 const pickColor = (s) => COLORS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 const isOwnerEmail = (email) => !!OWNER_EMAIL && email.toLowerCase() === OWNER_EMAIL.toLowerCase();
 

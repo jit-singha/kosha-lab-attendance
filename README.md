@@ -1,6 +1,6 @@
 # Kosha Lab Attendance Tracker
 
-A sleek, neon-styled daily attendance web app for Kosha Lab.
+A clean, professional daily attendance web app for Kosha Lab, with light and dark themes.
 
 Made by **Jit Singh**.
 
