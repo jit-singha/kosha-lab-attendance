@@ -20,6 +20,7 @@ const $$ = (s) => document.querySelectorAll(s);
 const pad = (n) => String(n).padStart(2, '0');
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const hm = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const shortDate = (k) => new Date(k + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 const niceDate = (k) => new Date(k + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const initials = (n) => String(n || '?').split(/\s+/).map((w) => w.match(/[\p{L}\p{N}]/u)?.[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
@@ -66,12 +67,12 @@ const userById = (id) => users.find((u) => u.uid === id);
 const isHR = () => isAdmin() || deptOf(me) === 'HR';
 
 // ---------- Shifts ----------
-const SHIFT_LABEL = { day: '☀ Day', night: '☾ Night' };
+const SHIFT_LABEL = { day: 'Day', night: 'Night' };
 const shiftOf = (u) => (u?.shift === 'night' ? 'night' : 'day');
 const shiftStart = (s) => (s === 'night' ? settings.nightStart || '21:00' : settings.start);
 const lateCutoff = (s = shiftOf(me)) => toMin(shiftStart(s)) + Number(settings.grace || 0);
 const fmtLate = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`);
-const shiftPill = (s) => `<span class="pill shift-${s}">${SHIFT_LABEL[s]}</span>`;
+const shiftPill = (s) => `<span class="pill shift-${s}">${icon(s === 'night' ? 'moon' : 'sun')}${SHIFT_LABEL[s]}</span>`;
 
 // Where a moment falls relative to a shift's start. Minutes are wrapped to ±12 h, so a night-shift
 // check-out at 06:00 belongs to the shift that started at 21:00 the evening before.
@@ -277,8 +278,20 @@ async function renderRecent() {
   const events = recs.flatMap((r) => [{ t: r.inTs, label: isLate(r) ? 'Late in' : 'In', cls: isLate(r) ? 'late' : 'ontime', date: r.date }, ...(r.outTs ? [{ t: r.outTs, label: 'Out', cls: 'ontime', date: r.date }] : [])])
     .sort((a, b) => b.t - a.t).slice(0, 6);
   $('#recentList').innerHTML = events.length
-    ? events.map((e) => `<li><span><span class="pill ${e.cls}">${e.label}</span></span><span class="t">${e.date.slice(5)} ${hm(e.t)}</span></li>`).join('')
+    ? events.map((e) => `<li><span><span class="pill ${e.cls}">${e.label}</span></span><span class="t">${shortDate(e.date)} · ${hm(e.t)}</span></li>`).join('')
     : '<li class="muted">No activity yet.</li>';
+  renderTodayStatus(recs);
+}
+
+// The Check In panel's one-line summary of today.
+let todayRec = null;
+function renderTodayStatus(recs) {
+  const today = todayRec = recs.find((r) => r.date === punchTiming(Date.now(), shiftOf(me)).date) || null;
+  let cls = '', text = 'Not checked in yet today';
+  if (today?.outTs) { cls = 'done'; text = `Checked in ${hm(today.inTs)} · checked out ${hm(today.outTs)}`; }
+  else if (today) { cls = isLate(today) ? 'late' : 'in'; text = `Checked in at ${hm(today.inTs)} · ${isLate(today) ? `late by ${fmtLate(today.lateBy)}` : 'on time'}`; }
+  $('#todayStatus').className = 'today-status ' + cls;
+  $('#todayStatus').innerHTML = `<span class="dot"></span><span>${text}</span>`;
 }
 
 async function renderHistory() {
@@ -353,31 +366,29 @@ function renderRotation() {
 function renderMembers() {
   renderRotation();
   const sorted = [...users].sort((a, b) => (ROLE_RANK[a.role] ?? 2) - (ROLE_RANK[b.role] ?? 2) || a.name.localeCompare(b.name));
+  $('#memberCount').textContent = `${users.length} ${users.length === 1 ? 'person' : 'people'}`;
   $('#memberList').innerHTML = sorted.map((u) => {
     const self = u.uid === me.uid, owner = isOwner(u);
-    const roleBtn = owner || self ? '' : `<select class="small-select role-select" data-role-select="${u.uid}" title="Change access">
-        ${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}"${(u.role || 'member') === v ? ' selected' : ''}>${l}</option>`).join('')}
-      </select>`;
-    const shiftSel = `<select class="small-select dept-select shift-sel-${shiftOf(u)}" data-shift-select="${u.uid}" title="Shift">
-        ${Object.entries(SHIFT_LABEL).map(([v, l]) => `<option value="${v}"${shiftOf(u) === v ? ' selected' : ''}>${l} shift</option>`).join('')}
-      </select>`;
+    const access = owner || self
+      ? `<span class="pill role-${u.role || 'member'}">${roleLabel(u)}</span>`
+      : `<select class="small-select role-select" data-role-select="${u.uid}" title="Change access">
+          ${Object.entries(ROLE_LABEL).map(([v, l]) => `<option value="${v}"${(u.role || 'member') === v ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>`;
     const dept = deptOf(u);
     const deptSel = `<select class="small-select dept-select" data-dept-select="${u.uid}" title="Department">
         <option value=""${dept ? '' : ' selected'}>No department</option>
         ${DEPTS.map((d) => `<option${dept === d ? ' selected' : ''}>${d}</option>`).join('')}
       </select>`;
-    const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member" aria-label="Remove member">${icon('x')}</button>`;
-    return `<div class="card member">
-      <button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">${icon('camera')}</span></button>
-      <div class="meta">
-        <b>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}</b>
-        <small>${esc(u.email)}</small>
-        ${u.empId ? `<small>${esc(u.empId)}</small>` : ''}
-        <div class="member-actions"><span class="pill role-${u.role || 'member'}">${roleLabel(u)}</span>${roleBtn}${deptSel}${shiftSel}</div>
-      </div>
-      ${delBtn}
-    </div>`;
-  }).join('') || '<div class="card empty">No members yet.</div>';
+    const shiftSel = `<select class="small-select dept-select shift-sel-${shiftOf(u)}" data-shift-select="${u.uid}" title="Shift">
+        ${Object.entries(SHIFT_LABEL).map(([v, l]) => `<option value="${v}"${shiftOf(u) === v ? ' selected' : ''}>${l} shift</option>`).join('')}
+      </select>`;
+    const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member" aria-label="Remove ${esc(u.name)}">${icon('x')}</button>`;
+    return `<tr>
+      <td><div class="who"><button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">${icon('camera')}</span></button>
+        <div>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}<small>${esc(u.email)}${u.empId ? ` · ${esc(u.empId)}` : ''}</small></div></div></td>
+      <td>${deptSel}</td><td>${access}</td><td>${shiftSel}</td><td class="actions">${delBtn}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="empty">No members yet.</td></tr>';
 }
 
 // Laptop request status, including derived "overdue".
@@ -455,6 +466,7 @@ function showTab(tab) {
   $$('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + tab));
   const [t, s] = PAGES[tab];
   $('#pageTitle').textContent = t; $('#pageSub').textContent = s;
+  $('.clock-card').hidden = tab === 'punch'; // the Check In panel shows the time itself
   ({ punch: renderRecent, history: renderHistory, team: renderHr, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers }[tab] || (() => {}))();
 }
 
@@ -588,6 +600,7 @@ async function enterApp(profile) {
   $('#meRole').textContent = roleLabel(me);
   $('#meRole').className = 'pill role-' + (me.role || 'member');
   $('#helloName').textContent = me.name.split(' ')[0];
+  renderTodayStatus([]); // don't show the previous person's status on a shared device
   setStatus('Ready when you are.'); // don't show the previous person's message on a shared device
   $$('[data-admin-only]').forEach((el) => { el.hidden = !isAdmin(); });
   $$('[data-devices-nav]').forEach((el) => { el.hidden = !canSeeDevices(); });
@@ -1529,8 +1542,10 @@ function tick() {
   const d = new Date();
   $('#clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   $('#ringTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('#greeting').textContent = d.getHours() < 12 ? 'Good morning' : d.getHours() < 17 ? 'Good afternoon' : 'Good evening';
+  $('#todayDate').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
   // Show the late-reason box once it's past the late cutoff for this person's shift.
-  if (me) $('#lateBox').hidden = !punchTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value;
+  if (me) $('#lateBox').hidden = !!todayRec || (!punchTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value);
   $('#date').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 setInterval(tick, 1000); tick();

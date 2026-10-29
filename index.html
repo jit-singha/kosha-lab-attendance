@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-29c">
+  <link rel="stylesheet" href="style.css?v=2026-10-29d">
   <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-family='Arial,sans-serif' font-weight='700' font-size='34' fill='%23fff'%3EK%3C/text%3E%3C/svg%3E">
   <script>try { const t = localStorage.getItem('koshalab.theme'); if (t) document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
@@ -92,15 +92,21 @@
           <div class="logo-sub">Attendance Tracker</div>
         </div>
       </div>
-      <div>
-        <div class="nav-label">Menu</div>
+      <div class="nav-groups">
+        <div class="nav-label">Attendance</div>
         <nav class="nav">
           <button class="nav-item active" data-tab="punch"><svg class="icon"><use href="#i-checkin"/></svg> Check In</button>
           <button class="nav-item" data-tab="history"><svg class="icon"><use href="#i-calendar"/></svg> My Attendance</button>
           <button class="nav-item" data-tab="team" data-hr-nav><svg class="icon"><use href="#i-clipboard"/></svg> Team Attendance</button>
           <button class="nav-item" data-tab="dashboard" data-admin-only><svg class="icon"><use href="#i-chart"/></svg> Dashboard</button>
+        </nav>
+        <div class="nav-label">Operations</div>
+        <nav class="nav">
           <button class="nav-item" data-tab="laptops"><svg class="icon"><use href="#i-laptop"/></svg> Laptops</button>
           <button class="nav-item" data-tab="devices" data-devices-nav><svg class="icon"><use href="#i-cpu"/></svg> Devices</button>
+        </nav>
+        <div class="nav-label" data-admin-only>Admin</div>
+        <nav class="nav">
           <button class="nav-item" data-tab="members" data-admin-only><svg class="icon"><use href="#i-users"/></svg> Team &amp; Access</button>
           <button class="nav-item" data-tab="settings" data-admin-only><svg class="icon"><use href="#i-settings"/></svg> Settings</button>
         </nav>
@@ -136,13 +142,19 @@
         <section id="tab-punch" class="panel active">
           <div class="punch-layout">
             <div class="card punch-card">
-              <div class="time-display"><small>Current time</small><span id="ringTime">--:--</span></div>
-              <div class="hello">Hello, <b id="helloName"></b></div>
+              <div class="today">
+                <div>
+                  <small id="greeting">Welcome</small>
+                  <h2 id="helloName"></h2>
+                  <div id="todayStatus" class="today-status"><span class="dot"></span><span>Not checked in yet today</span></div>
+                </div>
+                <div class="today-time"><span id="ringTime">--:--</span><small id="todayDate"></small></div>
+              </div>
               <div class="field">
                 <span>Which shift are you working?</span>
                 <div class="seg shift-seg">
-                  <button class="seg-btn" data-shift="day">☀ Day shift</button>
-                  <button class="seg-btn" data-shift="night">☾ Night shift</button>
+                  <button class="seg-btn" data-shift="day"><svg class="icon"><use href="#i-sun"/></svg> Day shift</button>
+                  <button class="seg-btn" data-shift="night"><svg class="icon"><use href="#i-moon"/></svg> Night shift</button>
                 </div>
               </div>
               <label id="lateBox" class="field late-box" hidden>
@@ -306,8 +318,8 @@
               </select>
               <select id="dashShift" class="small-select" title="Shift">
                 <option value="all">All shifts</option>
-                <option value="day">☀ Day shift</option>
-                <option value="night">☾ Night shift</option>
+                <option value="day">Day shift</option>
+                <option value="night">Night shift</option>
               </select>
             </div>
             <button id="btnExport" class="btn btn-ghost btn-small">Export CSV</button>
@@ -521,7 +533,7 @@
                 <option>Finance</option>
               </select>
               <select id="mRole"><option value="member">Member</option><option value="operator">Operator</option><option value="admin">Admin</option></select>
-              <select id="mShift"><option value="day">☀ Day shift</option><option value="night">☾ Night shift</option></select>
+              <select id="mShift"><option value="day">Day shift</option><option value="night">Night shift</option></select>
               <button class="btn btn-primary" type="submit">Add member</button>
             </form>
             <div id="memberErr" class="form-err"></div>
@@ -529,20 +541,28 @@
           <div class="card rotate-card">
             <div>
               <h3>Shift rotation</h3>
-              <p class="muted small">Currently <b id="rotDay">0</b> on ☀ Day shift and <b id="rotNight">0</b> on ☾ Night shift. When the shifts rotate, swap everyone at once — or change one person using the shift menu on their card. Past attendance keeps the shift it was recorded on.</p>
+              <p class="muted small">Currently <b id="rotDay">0</b> on Day shift and <b id="rotNight">0</b> on Night shift. When the shifts rotate, swap everyone at once — or change one person using the shift menu on their card. Past attendance keeps the shift it was recorded on.</p>
               <p id="rotLast" class="muted small"></p>
             </div>
             <button id="btnRotate" class="btn btn-primary"><svg class="icon"><use href="#i-repeat"/></svg> Rotate shifts</button>
           </div>
-          <div id="memberList" class="member-grid"></div>
+          <div class="card">
+            <div class="card-head"><h3>Team members</h3><span id="memberCount" class="badge">0 people</span></div>
+            <div class="table-wrap">
+              <table class="member-table">
+                <thead><tr><th>Member</th><th>Department</th><th>Access</th><th>Shift</th><th></th></tr></thead>
+                <tbody id="memberList"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- SETTINGS (admin) -->
         <section id="tab-settings" class="panel">
           <div class="card settings">
             <h3>Shift rules</h3>
-            <label class="field"><span>☀ Day shift starts</span><input type="time" id="setStart"></label>
-            <label class="field"><span>☾ Night shift starts</span><input type="time" id="setNightStart"></label>
+            <label class="field"><span>Day shift starts</span><input type="time" id="setStart"></label>
+            <label class="field"><span>Night shift starts</span><input type="time" id="setNightStart"></label>
             <p class="muted small">Night shift check-ins and check-outs after midnight count towards the night the shift started.</p>
             <label class="field"><span>Grace period (minutes)</span><input type="number" id="setGrace" min="0" max="180"></label>
             <button id="btnSave" class="btn btn-primary">Save settings</button>
@@ -620,6 +640,6 @@
   <input id="photoInput" type="file" accept="image/*" hidden>
 
   <div id="toast" class="toast"></div>
-  <script type="module" src="app.js?v=2026-10-29c"></script>
+  <script type="module" src="app.js?v=2026-10-29d"></script>
 </body>
 </html>

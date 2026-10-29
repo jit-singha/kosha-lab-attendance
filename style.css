@@ -99,6 +99,8 @@ body {
 .logo-sub { font-size: 12px; color: var(--muted); }
 
 .nav-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 0 10px 6px; }
+.nav-label + .nav { margin-bottom: 18px; }
+.nav-groups { display: flex; flex-direction: column; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item {
   all: unset; cursor: pointer; padding: 8px 10px; border-radius: var(--radius-sm);
@@ -113,7 +115,7 @@ body {
 
 /* ---------- Content ---------- */
 .content { flex: 1; min-width: 0; padding: 28px 40px 40px; max-width: 1360px; }
-.topbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.topbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; flex-wrap: nowrap; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .topbar h1 { font-size: 24px; font-weight: 650; letter-spacing: -.4px; line-height: 1.25; }
 .topbar p { margin-top: 4px; }
 .topbar > div:first-child { flex: 1 1 320px; min-width: 0; }
@@ -139,11 +141,6 @@ body {
 /* ---------- Check in ---------- */
 .punch-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .punch-card { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
-.time-display { text-align: center; padding: 22px 16px 18px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
-.time-display span { display: block; font-size: 48px; font-weight: 650; letter-spacing: -1.5px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.time-display small { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; font-weight: 500; }
-.hello { text-align: center; color: var(--muted); font-size: 15px; }
-.hello b { color: var(--text); font-weight: 600; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); }
 .field.inline { flex-direction: row; align-items: center; gap: 8px; }
@@ -264,14 +261,6 @@ img.av { object-fit: cover; display: block; border: 1px solid var(--border); bac
 
 /* ---------- Team ---------- */
 .member-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-.member { display: flex; align-items: flex-start; gap: 14px; padding: 18px; margin: 0; transition: box-shadow .15s, border-color .15s; }
-.member:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
-.member .av { width: 44px; height: 44px; font-size: 15px; }
-.member .meta { flex: 1; min-width: 0; }
-.member .meta b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.member .meta small { display: block; color: var(--muted); font-size: 12px; }
-.member-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .del { all: unset; cursor: pointer; color: var(--muted); padding: 4px 8px; border-radius: 6px; line-height: 1; display: inline-grid; place-items: center; }
 .del:hover { color: var(--danger); background: var(--danger-soft); }
 .del:focus-visible { outline: 2px solid var(--primary); }
@@ -301,7 +290,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .auth-card .logo { padding: 0; }
 .auth-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -.3px; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); }
-.seg-btn { all: unset; cursor: pointer; text-align: center; padding: 7px 10px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg-btn { all: unset; cursor: pointer; text-align: center; white-space: nowrap; padding: 7px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .seg-btn:hover { color: var(--text); }
 .seg-btn:focus-visible { outline: 2px solid var(--primary); }
 .seg-btn.active { color: var(--text); background: var(--surface); box-shadow: var(--shadow-sm); }
@@ -404,16 +393,18 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 @media (max-width: 900px) {
   .shell { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: sticky; top: 0; z-index: 10; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .sidebar > div:has(> .nav) { order: 3; width: 100%; }
+  .nav-groups { order: 3; width: 100%; flex-direction: row; overflow-x: auto; scrollbar-width: none; gap: 2px; }
+  .nav-groups::-webkit-scrollbar { display: none; }
+  .nav-label + .nav { margin-bottom: 0; }
   .nav-label { display: none; }
-  .nav { flex-direction: row; overflow-x: auto; width: 100%; scrollbar-width: none; margin: 0 -4px; }
+  .nav { flex-direction: row; flex-shrink: 0; }
   .nav::-webkit-scrollbar { display: none; }
   .nav-item { white-space: nowrap; padding: 7px 10px; font-size: 13px; }
   .logo-sub { display: none; }
   .user-chip { margin: 0 0 0 auto; padding: 0; border: 0; width: auto; order: 2; }
   .user-chip .meta { display: none; }
   .content { padding: 20px 16px 32px; }
-  .topbar { align-items: flex-start; }
+  .topbar { align-items: flex-start; flex-wrap: wrap; }
   .topbar h1 { font-size: 21px; }
   .clock-card { text-align: left; }
   .punch-layout { grid-template-columns: 1fr; }
@@ -437,8 +428,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .c-violet { --c: var(--violet); }
 .stats.five { grid-template-columns: repeat(5, 1fr); }
 .pill.leave { background: var(--violet-soft); color: var(--violet); }
-.seg.three { grid-template-columns: repeat(3, 1fr); }
-.hr-seg { width: min(440px, 100%); }
+.seg.three { grid-template-columns: repeat(3, auto); }
+.hr-seg { width: auto; max-width: 100%; }
 .count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 600; }
 .count-badge:empty { display: none; }
 hr.spaced { margin: 20px 0 16px; }
@@ -525,3 +516,31 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .status-select.cf-sent { color: var(--info); }
 .status-select.cf-received { color: var(--success); }
 .status-select.cf-none { color: var(--muted); }
+
+/* ---------- Polish ---------- */
+.pill .icon, .seg-btn .icon { width: 13px; height: 13px; stroke-width: 2; }
+.pill .icon { margin-right: 4px; }
+
+/* Check In: today panel */
+.today { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 20px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
+.today small { display: block; font-size: 13px; color: var(--muted); }
+.today h2 { font-size: 22px; font-weight: 650; letter-spacing: -.4px; margin: 2px 0 10px; }
+.today-time { text-align: right; }
+.today-time span { display: block; font-size: 34px; font-weight: 650; letter-spacing: -1px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.today-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-2); padding: 4px 10px 4px 8px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); }
+.today-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.today-status.in .dot, .today-status.done .dot { background: var(--success); }
+.today-status.in { color: var(--success); }
+.today-status.late .dot { background: var(--danger); }
+.today-status.late { color: var(--danger); }
+
+/* Team & Access: member table */
+.member-table td { vertical-align: middle; }
+.member-table .who > div { min-width: 0; }
+.member-table .photo-btn .av { width: 36px; height: 36px; }
+.member-table select { min-width: 130px; }
+
+@media (max-width: 480px) {
+  .today { flex-direction: column-reverse; }
+  .today-time { text-align: left; }
+}
