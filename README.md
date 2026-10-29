@@ -2,8 +2,6 @@
 
 A clean, professional daily attendance web app for Kosha Lab, with light and dark themes.
 
-Made by **Jit Singh**.
-
 ## Features
 - **Accounts & admin access**: everyone signs in with email and password. Admins can add members, give or remove admin access, and remove people. The owner account is always an admin.
 - **Check in / check out**: each person checks themselves in, with a live clock.
