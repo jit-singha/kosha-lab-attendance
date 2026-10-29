@@ -13,7 +13,7 @@ service cloud.firestore {
     // Everyone in Operations (and admins) logs devices and damage. The IT department can view them.
     function isOperator() { return isAdmin() || (isMember() && me().get('dept', '') == 'Operations'); }
     function canViewDevices() { return isOperator() || (isMember() && me().get('dept', '') == 'IT'); }
-    function validDept() { return request.resource.data.get('dept', '') in ['', 'Operations', 'IT', 'Data Analysis']; }
+    function validDept() { return request.resource.data.get('dept', '') in ['', 'Operations', 'IT', 'Data Analysis', 'HR', 'Finance']; }
     // People pick their department once (at sign-up, or later if it's empty); after that only admins change it.
     function deptOk() {
       return request.resource.data.get('dept', '') == resource.data.get('dept', '')

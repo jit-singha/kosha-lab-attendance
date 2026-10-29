@@ -52,7 +52,7 @@ const isOwner = (u) => !!OWNER_EMAIL && u?.email === OWNER_EMAIL.toLowerCase();
 
 let store, me = null, settings = { start: '09:30', nightStart: '21:00', grace: 10 }, users = [];
 const isAdmin = () => me?.role === 'admin';
-const DEPTS = ['Operations', 'IT', 'Data Analysis'];
+const DEPTS = ['Operations', 'IT', 'Data Analysis', 'HR', 'Finance'];
 const deptOf = (u) => DEPTS.find((d) => d.toLowerCase() === String(u?.dept || '').trim().toLowerCase()) || '';
 // Everyone in Operations (and admins) logs devices and damage; the IT department can view them.
 const isOperator = () => isAdmin() || deptOf(me) === 'Operations';
