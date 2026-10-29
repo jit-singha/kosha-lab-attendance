@@ -432,3 +432,63 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 }
 .del .icon { width: 16px; height: 16px; }
 .photo-btn .cam .icon { width: 11px; height: 11px; }
+
+/* ---------- Leave + team attendance ---------- */
+.c-violet { --c: var(--violet); }
+.stats.five { grid-template-columns: repeat(5, 1fr); }
+.pill.leave { background: var(--violet-soft); color: var(--violet); }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.hr-seg { width: min(440px, 100%); }
+.count-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 600; }
+.count-badge:empty { display: none; }
+hr.spaced { margin: 20px 0 16px; }
+.form-note { margin-top: 12px; }
+
+.leave-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.leave-tile { padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); }
+.leave-tile label { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
+.leave-tile span { display: block; font-size: 26px; font-weight: 650; letter-spacing: -.5px; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.leave-tile small { font-size: 12px; color: var(--muted); }
+.leave-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; align-items: end; }
+.leave-form .wide { grid-column: span 2; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .mcell { width: 24px; height: 20px; font-size: 10px; cursor: default; }
+.month-grid { min-width: 0 !important; font-size: 12px; }
+.month-grid th { padding: 8px 2px; text-align: center; font-size: 11px; }
+.month-grid th small { display: block; font-weight: 400; opacity: .8; }
+.month-grid th.sun { color: var(--danger); }
+.month-grid td { padding: 3px 1px; text-align: center; }
+.month-grid .mem { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; padding: 6px 12px 6px 0; min-width: 190px; }
+.month-grid th.mem { background: var(--surface-2); padding-left: 12px; }
+.month-grid tbody tr:hover td.mem { background: var(--surface-hover); }
+.month-grid .tot { padding: 6px 8px; font-weight: 650; font-variant-numeric: tabular-nums; min-width: 54px; color: var(--text); }
+.month-grid td.tot.ok { color: var(--success); }
+.month-grid td.tot.late { color: var(--danger); }
+.month-grid td.tot.abs { color: var(--warning); }
+.mcell {
+  all: unset; box-sizing: border-box; position: relative; display: inline-grid; place-items: center; width: 28px; height: 26px; border-radius: 6px;
+  font-size: 11px; font-weight: 650; font-style: normal; cursor: pointer; background: var(--surface-2); color: var(--muted);
+}
+button.mcell:hover { box-shadow: 0 0 0 2px var(--primary); }
+button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.mcell.none { cursor: default; background: transparent; opacity: .5; }
+.mcell i { position: absolute; top: 3px; right: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.st-present { background: var(--success-soft); color: var(--success); }
+.st-late { background: var(--danger-soft); color: var(--danger); }
+.st-absent { background: var(--warning-soft); color: var(--warning); }
+.st-week_off { background: var(--surface-2); color: var(--text-2); }
+.st-casual, .st-sick, .st-paid { background: var(--violet-soft); color: var(--violet); }
+.st-sick { background: var(--info-soft); color: var(--info); }
+
+@media (max-width: 1100px) {
+  .stats.five { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+  .stats.five { grid-template-columns: repeat(2, 1fr); }
+  .leave-tiles { grid-template-columns: repeat(2, 1fr); }
+  .leave-form { grid-template-columns: 1fr; }
+  .leave-form .wide { grid-column: auto; }
+  .month-grid .mem { min-width: 140px; }
+}

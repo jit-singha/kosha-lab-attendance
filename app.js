@@ -4,7 +4,8 @@ import { OWNER_EMAIL } from './firebase-config.js';
 
 const PAGES = {
   punch: ['Check In', "Record today's attendance with time and location."],
-  history: ['My Attendance', 'Your check-in history, late arrivals and locations.'],
+  history: ['My Attendance', 'Your check-in history, leave and leave requests.'],
+  team: ['Team Attendance', "Everyone's attendance by day or month, corrections and leave approvals."],
   dashboard: ['Dashboard', 'Daily overview of attendance, late arrivals and locations.'],
   laptops: ['Laptops', 'Requests to take company laptops home, approvals and returns.'],
   devices: ['Devices', 'Daily device deployments, where they went, and damage reports.'],
@@ -61,6 +62,8 @@ const ROLE_LABEL = { admin: 'Admin', operator: 'Operator', member: 'Member' };
 const ROLE_RANK = { admin: 0, operator: 1, member: 2 };
 const roleLabel = (u) => (isOwner(u) ? 'Owner' : ROLE_LABEL[u.role] || 'Member');
 const userById = (id) => users.find((u) => u.uid === id);
+// HR (and admins) see everyone's attendance, correct it and approve leave.
+const isHR = () => isAdmin() || deptOf(me) === 'HR';
 
 // ---------- Shifts ----------
 const SHIFT_LABEL = { day: '☀ Day', night: '☾ Night' };
@@ -158,10 +161,11 @@ async function punch(kind) {
       // Search the member's own records rather than opening today's record directly: for a record that
       // doesn't exist yet the security rules can't confirm whose it is, so a direct read is refused for members.
       existing = (await myRecords()).find((r) => r.id === id);
+      if (existing && !existing.inTs) return setStatus(`HR has marked this day as <b>${MARKS[existing.mark] || 'recorded'}</b>. Contact HR if that's not right.`, 'err');
       if (existing) return setStatus(`You already checked in for this ${SHIFT_LABEL[existing.shift || shift]} shift at <b>${hm(existing.inTs)}</b>.`, 'err');
     } else {
       // Check out of the most recent shift, whichever shift and date it was recorded on.
-      existing = (await myRecords()).find((r) => Date.now() - r.inTs < OPEN_SHIFT_MS);
+      existing = (await myRecords()).find((r) => r.inTs && Date.now() - r.inTs < OPEN_SHIFT_MS);
       if (!existing) return setStatus("You haven't checked in for a shift yet.", 'err');
       if (existing.outTs) return setStatus(`You already checked out at <b>${hm(existing.outTs)}</b>.`, 'err');
       id = existing.id;
@@ -196,9 +200,24 @@ async function punch(kind) {
 }
 
 // ---------- Shared bits ----------
-function statusPill(r) {
-  if (!r) return '<span class="pill absent">Absent</span>';
-  return r.late ? `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>` : '<span class="pill ontime">On time</span>';
+// A day's status: an HR correction wins, then a check-in, then approved leave; otherwise absent.
+const LEAVE_TYPES = { week_off: 'Week off', casual: 'Casual leave', sick: 'Sick leave', paid: 'Paid leave' };
+const LEAVE_CODE = { week_off: 'WO', casual: 'CL', sick: 'SL', paid: 'PL' };
+const MARKS = { present: 'Present', absent: 'Absent', ...LEAVE_TYPES };
+function dayStatus(r, leave) {
+  if (r?.mark) return r.mark;
+  if (r?.inTs) return r.late ? 'late' : 'present';
+  return leave ? leave.type : 'absent';
+}
+const isPresent = (st) => st === 'present' || st === 'late';
+const statusLabel = (st, r) => (st === 'late' ? 'Late' : st === 'present' ? (r?.inTs && !r.mark ? 'On time' : 'Present') : MARKS[st]);
+
+function statusPill(r, leave) {
+  const st = dayStatus(r, leave);
+  const by = r?.mark ? `<small class="coords">Marked by ${esc(r.markedByName || 'HR')}</small>` : '';
+  if (st === 'late') return `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>`;
+  const cls = st === 'present' ? 'ontime' : st === 'absent' ? 'absent' : 'leave';
+  return `<span class="pill ${cls}">${statusLabel(st, r)}</span>${by}`;
 }
 
 function locCell(r) {
@@ -233,11 +252,11 @@ function renderPolicy() {
 }
 
 async function myRecords() {
-  return (await store.attendanceByUser(me.uid)).sort((a, b) => b.inTs - a.inTs);
+  return (await store.attendanceByUser(me.uid)).sort((a, b) => b.date.localeCompare(a.date) || (b.inTs || 0) - (a.inTs || 0));
 }
 
 async function renderRecent() {
-  const recs = await guard(myRecords) || [];
+  const recs = (await guard(myRecords) || []).filter((r) => r.inTs);
   const events = recs.flatMap((r) => [{ t: r.inTs, label: r.late ? 'Late in' : 'In', cls: r.late ? 'late' : 'ontime', date: r.date }, ...(r.outTs ? [{ t: r.outTs, label: 'Out', cls: 'ontime', date: r.date }] : [])])
     .sort((a, b) => b.t - a.t).slice(0, 6);
   $('#recentList').innerHTML = events.length
@@ -246,15 +265,18 @@ async function renderRecent() {
 }
 
 async function renderHistory() {
-  const recs = await guard(myRecords) || [];
+  const [recs] = await Promise.all([guard(myRecords).then((r) => r || []), loadLeaves()]);
   recs.forEach((r) => mapRecords.set(r.id, r));
-  $('#myPresent').textContent = recs.length;
-  $('#myLate').textContent = recs.filter((r) => r.late).length;
-  const avg = recs.length ? recs.reduce((s, r) => { const d = new Date(r.inTs); return s + d.getHours() * 60 + d.getMinutes(); }, 0) / recs.length : null;
+  const sts = recs.map((r) => dayStatus(r));
+  $('#myPresent').textContent = sts.filter(isPresent).length;
+  $('#myLate').textContent = sts.filter((s) => s === 'late').length;
+  const ins = recs.filter((r) => r.inTs);
+  const avg = ins.length ? ins.reduce((s, r) => { const d = new Date(r.inTs); return s + d.getHours() * 60 + d.getMinutes(); }, 0) / ins.length : null;
   $('#myAvg').textContent = avg == null ? '—' : fmtMin(avg);
   $('#myBody').innerHTML = recs.length
-    ? recs.map((r) => `<tr><td class="nowrap">${niceDate(r.date)}</td><td class="mono">${hm(r.inTs)}</td><td class="mono">${r.outTs ? hm(r.outTs) : '—'}</td><td>${statusPill(r)}</td><td>${locCell(r)}</td></tr>`).join('')
+    ? recs.map((r) => `<tr><td class="nowrap">${niceDate(r.date)}</td><td class="mono">${r.inTs ? hm(r.inTs) : '—'}</td><td class="mono">${r.outTs ? hm(r.outTs) : '—'}</td><td>${statusPill(r)}</td><td>${locCell(r)}</td></tr>`).join('')
     : '<tr><td colspan="5" class="empty">No attendance yet. Check in from the Check In page.</td></tr>';
+  renderMyLeaves();
 }
 
 const inDashDept = (u) => {
@@ -275,21 +297,22 @@ function dashRoster(logs) {
 
 async function renderDashboard() {
   const date = $('#dashDate').value || dayKey();
-  const [logs, late] = await Promise.all([guard(() => store.attendanceByDate(date)), guard(() => store.lateRecords())]);
+  const [logs, late] = await Promise.all([guard(() => store.attendanceByDate(date)), guard(() => store.lateRecords()), loadLeaves()]);
   if (!logs) return;
   logs.forEach((r) => mapRecords.set(r.id, r));
-  const roster = dashRoster(logs);
-  const present = roster.filter((x) => x.rec);
-  const lateCount = present.filter((x) => x.rec.late).length;
+  const roster = dashRoster(logs).map((x) => ({ ...x, lv: leaveOn(x.u.uid, date) }));
+  const sts = roster.map((x) => dayStatus(x.rec, x.lv));
+  const presentCount = sts.filter(isPresent).length;
   $('#stTotal').textContent = roster.length;
-  $('#stOnTime').textContent = present.length - lateCount;
-  $('#stLate').textContent = lateCount;
-  $('#stAbsent').textContent = roster.length - present.length;
-  $('#rateBadge').textContent = `${roster.length ? Math.round((present.length / roster.length) * 100) : 0}% present`;
+  $('#stOnTime').textContent = sts.filter((s) => s === 'present').length;
+  $('#stLate').textContent = sts.filter((s) => s === 'late').length;
+  $('#stAbsent').textContent = sts.filter((s) => s === 'absent').length;
+  $('#stLeave').textContent = sts.filter((s) => s in LEAVE_TYPES).length;
+  $('#rateBadge').textContent = `${roster.length ? Math.round((presentCount / roster.length) * 100) : 0}% present`;
 
-  const rows = roster.map(({ u, rec: l, shift }) => {
+  const rows = roster.map(({ u, rec: l, shift, lv }) => {
     const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
-    return { sort: l ? l.inTs : Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l)}</td><td>${locCell(l)}</td></tr>` };
+    return { sort: l?.inTs || Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l?.inTs ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l, lv)}</td><td>${locCell(l)}</td></tr>` };
   }).sort((a, b) => a.sort - b.sort);
   $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody matches these filters.' : 'No members yet.'}</td></tr>`;
 
@@ -415,12 +438,12 @@ function showTab(tab) {
   $$('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + tab));
   const [t, s] = PAGES[tab];
   $('#pageTitle').textContent = t; $('#pageSub').textContent = s;
-  ({ punch: renderRecent, history: renderHistory, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers }[tab] || (() => {}))();
+  ({ punch: renderRecent, history: renderHistory, team: renderHr, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers }[tab] || (() => {}))();
 }
 
 async function loadShared() {
   settings = (await guard(() => store.getSettings())) || settings;
-  users = isAdmin() ? (await guard(() => store.listUsers())) || [] : [me];
+  users = isHR() ? (await guard(() => store.listUsers())) || [] : [me];
   renderPolicy();
   $('#setStart').value = settings.start;
   $('#setNightStart').value = settings.nightStart || '21:00';
@@ -553,7 +576,7 @@ async function enterApp(profile) {
   $$('[data-devices-nav]').forEach((el) => { el.hidden = !canSeeDevices(); });
   $$('[data-logger-only]').forEach((el) => { el.hidden = !isOperator(); });
   $('#devViewOnly').hidden = isOperator();
-  $$('[data-member-only]').forEach((el) => { el.hidden = isAdmin(); });
+  $$('[data-hr-nav]').forEach((el) => { el.hidden = !isHR(); });
   await loadShared();
   // People who signed up before departments existed choose theirs once. Admins can skip.
   $('#deptLater').hidden = !isAdmin();
@@ -620,13 +643,13 @@ $('#dashDept').addEventListener('change', renderDashboard);
 
 $('#btnExport').addEventListener('click', async () => {
   const date = $('#dashDate').value || dayKey();
-  const logs = await guard(() => store.attendanceByDate(date));
+  const [logs] = await Promise.all([guard(() => store.attendanceByDate(date)), loadLeaves()]);
   if (!logs) return;
   const f = $('#dashShift').value;
   const rows = dashRoster(logs).sort((a, b) => a.u.name.localeCompare(b.u.name)).map(({ u, rec: l, shift }) => {
-    const loc = l?.loc;
-    return [date, u.name, u.email, u.empId, deptOf(u), shift === 'night' ? 'Night' : 'Day', l ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
-      l ? (l.late ? 'Late' : 'On time') : 'Absent', l?.late ? l.lateBy : '',
+    const loc = l?.loc, st = dayStatus(l, leaveOn(u.uid, date));
+    return [date, u.name, u.email, u.empId, deptOf(u), shift === 'night' ? 'Night' : 'Day', l?.inTs ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
+      statusLabel(st, l), st === 'late' ? l.lateBy : '',
       loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
   });
   const d = $('#dashDept').value;
@@ -786,6 +809,239 @@ $('#lpBody').addEventListener('click', async (e) => {
     renderLaptops();
     toast({ approve: 'Request approved', reject: 'Request rejected', return: 'Marked as returned' }[act]);
   }
+});
+
+// ---------- Leave ----------
+let leaves = [];
+const leaveDays = (l) => Math.round((new Date(l.to + 'T00:00') - new Date(l.from + 'T00:00')) / 864e5) + 1;
+const leaveOn = (uid, date) => leaves.find((l) => l.uid === uid && l.status === 'approved' && l.from <= date && date <= l.to);
+const LV_PILL = { pending: ['absent', 'Pending'], approved: ['ontime', 'Approved'], rejected: ['muted-pill', 'Rejected'] };
+const lvDates = (l) => (l.from === l.to ? niceDate(l.from) : `${niceDate(l.from)} →<br>${niceDate(l.to)}`);
+const lvStatus = (l) => `<span class="pill ${LV_PILL[l.status][0]}">${LV_PILL[l.status][1]}</span>${l.decidedByName && l.status !== 'pending' ? `<small class="coords">by ${esc(l.decidedByName)}</small>` : ''}`;
+
+async function loadLeaves() {
+  leaves = (await guard(() => store.listLeaves(isHR() ? null : me.uid))) || [];
+  return leaves;
+}
+
+function renderMyLeaves() {
+  const mine = leaves.filter((l) => l.uid === me.uid).sort((a, b) => b.createdAt - a.createdAt);
+  const year = String(new Date().getFullYear());
+  $('#lvYear').textContent = year;
+  $('#lvTiles').innerHTML = Object.entries(LEAVE_TYPES).map(([t, label]) => {
+    const of = (s) => mine.filter((l) => l.type === t && l.status === s && l.from.startsWith(year)).reduce((n, l) => n + leaveDays(l), 0);
+    const pending = of('pending');
+    return `<div class="leave-tile lv-${t}"><label>${label}</label><span>${of('approved')}</span><small>${pending ? `${pending} day${pending === 1 ? '' : 's'} pending` : 'days taken'}</small></div>`;
+  }).join('');
+  $('#lvMyBody').innerHTML = mine.length ? mine.map((l) => `<tr>
+      <td><span class="pill leave">${LEAVE_TYPES[l.type]}</span></td>
+      <td class="nowrap">${lvDates(l)}</td><td class="mono">${leaveDays(l)}</td>
+      <td class="reason">${esc(l.reason) || '<span class="muted">—</span>'}</td>
+      <td>${lvStatus(l)}</td>
+      <td class="actions">${l.status === 'pending' ? `<button class="btn btn-xs btn-ghost" data-lv-cancel="${l.id}">Cancel</button>` : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">No leave requests yet.</td></tr>';
+}
+
+$('#lvFrom').value = $('#lvTo').value = dayKey();
+$('#lvFrom').addEventListener('change', () => { if ($('#lvTo').value < $('#lvFrom').value) $('#lvTo').value = $('#lvFrom').value; });
+$('#leaveForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const type = $('#lvType').value, from = $('#lvFrom').value, to = $('#lvTo').value;
+  if (to < from) return toast('The end date must be on or after the start date.');
+  const clash = leaves.find((l) => l.uid === me.uid && l.status !== 'rejected' && l.from <= to && from <= l.to);
+  if (clash) return toast(`You already have ${LEAVE_TYPES[clash.type].toLowerCase()} on those dates.`);
+  const ok = await guard(async () => {
+    await store.addRecord('leaves', { uid: me.uid, name: me.name, dept: deptOf(me), type, from, to, reason: $('#lvReason').value.trim(), status: 'pending', createdAt: Date.now() });
+    return true;
+  });
+  if (!ok) return;
+  $('#lvReason').value = '';
+  await loadLeaves();
+  renderMyLeaves();
+  toast('Leave request sent to HR');
+});
+$('#lvMyBody').addEventListener('click', async (e) => {
+  const id = e.target.closest('[data-lv-cancel]')?.dataset.lvCancel;
+  if (!id || !confirm('Cancel this leave request?')) return;
+  if (await guard(async () => { await store.deleteRecord('leaves', id); return true; })) {
+    await loadLeaves(); renderMyLeaves(); toast('Leave request cancelled');
+  }
+});
+
+// ---------- Team attendance (HR + admins) ----------
+let hrView = 'daily';
+const hrLogs = new Map(); // attendance records of the day shown in the daily view, by id
+const byName = (a, b) => a.name.localeCompare(b.name);
+const inHrDept = (u) => { const d = $('#hrDept').value; return d === 'all' || (d === 'none' ? !deptOf(u) : deptOf(u) === d); };
+// HR can't correct their own attendance or approve their own leave; admins can.
+const canEditFor = (uid) => isAdmin() || (isHR() && uid !== me.uid);
+const joinedOn = (u) => (u.createdAt ? dayKey(new Date(u.createdAt)) : '');
+
+$('#hrDept').innerHTML = `<option value="all">All departments</option>${DEPTS.map((d) => `<option>${d}</option>`).join('')}<option value="none">No department</option>`;
+$('#hrDate').value = dayKey();
+$('#hrMonth').value = dayKey().slice(0, 7);
+
+function setHrView(v) {
+  hrView = v;
+  $$('.seg-btn[data-hr]').forEach((b) => b.classList.toggle('active', b.dataset.hr === v));
+  $$('.hr-view').forEach((el) => { el.hidden = el.id !== 'hr-' + v; });
+  $$('[data-hr-view]').forEach((el) => { el.hidden = !el.dataset.hrView.split(' ').includes(v); });
+  renderHr();
+}
+
+async function renderHr() {
+  if (!isHR()) return;
+  await loadLeaves();
+  const pending = leaves.filter((l) => l.status === 'pending').length;
+  $('#lvBadge').textContent = pending || '';
+  if (hrView === 'daily') return renderHrDaily();
+  if (hrView === 'monthly') return renderHrMonthly();
+  renderHrLeaves();
+}
+
+async function renderHrDaily() {
+  const date = $('#hrDate').value || dayKey();
+  const logs = await guard(() => store.attendanceByDate(date));
+  if (!logs) return;
+  hrLogs.clear();
+  logs.forEach((r) => { hrLogs.set(r.id, r); mapRecords.set(r.id, r); });
+  const people = users.filter(inHrDept).sort(byName).map((u) => {
+    const rec = hrLogs.get(`${u.uid}_${date}`), lv = leaveOn(u.uid, date);
+    return { u, rec, lv, st: dayStatus(rec, lv) };
+  });
+  const count = (f) => people.filter((p) => f(p.st)).length;
+  $('#hrPresent').textContent = count((s) => s === 'present');
+  $('#hrLate').textContent = count((s) => s === 'late');
+  $('#hrAbsent').textContent = count((s) => s === 'absent');
+  $('#hrLeave').textContent = count((s) => s in LEAVE_TYPES);
+  $('#hrDayTitle').textContent = `Attendance — ${niceDate(date)}`;
+  $('#hrDayBody').innerHTML = people.length ? people.map(({ u, rec, lv }) => {
+    const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
+    const sel = canEditFor(u.uid) ? `<select class="small-select status-select" data-mark="${u.uid}" title="Change attendance">
+        <option value="">${rec?.inTs ? 'As checked in' : lv ? 'As on leave' : 'Not marked'}</option>
+        ${Object.entries(MARKS).map(([v, l]) => `<option value="${v}"${rec?.mark === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>` : '<span class="muted small">Ask an admin</span>';
+    return `<tr><td>${who}</td><td>${shiftPill(rec?.shift || shiftOf(u))}</td><td class="mono">${rec?.inTs ? hm(rec.inTs) : '—'}</td><td class="mono">${rec?.outTs ? hm(rec.outTs) : '—'}</td><td>${statusPill(rec, lv)}</td><td>${locCell(rec)}</td><td>${sel}</td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty">${users.length ? 'Nobody in this department.' : 'No members yet.'}</td></tr>`;
+}
+
+// Correct one person's day. The original check-in (if any) is kept; the mark overrides it.
+async function setMark(uid, date, mark) {
+  const u = userById(uid), id = `${uid}_${date}`;
+  const rec = { id, uid, date, mark: mark || null, markedBy: me.uid, markedByName: me.name, markedAt: Date.now() };
+  if (!hrLogs.has(id)) Object.assign(rec, { name: u.name, shift: shiftOf(u) });
+  if (await guard(async () => { await store.saveAttendance(rec); return true; })) {
+    toast(mark ? `${u.name} marked ${MARKS[mark].toLowerCase()} on ${niceDate(date)}` : `${u.name}'s mark removed`);
+  }
+  renderHrDaily();
+}
+$('#hrDayBody').addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-mark]');
+  if (sel) setMark(sel.dataset.mark, $('#hrDate').value || dayKey(), sel.value);
+});
+
+// Everyone's month: one row per person, one cell per day, plus totals.
+async function monthData() {
+  const month = $('#hrMonth').value || dayKey().slice(0, 7);
+  const [y, m] = month.split('-').map(Number);
+  const days = Array.from({ length: new Date(y, m, 0).getDate() }, (_, i) => `${month}-${pad(i + 1)}`);
+  const logs = await guard(() => store.attendanceBetween(days[0], days[days.length - 1]));
+  if (!logs) return null;
+  const byKey = new Map(logs.map((r) => [`${r.uid}_${r.date}`, r]));
+  const today = dayKey();
+  const rows = users.filter(inHrDept).sort(byName).map((u) => {
+    const joined = joinedOn(u);
+    const tally = { present: 0, late: 0, absent: 0, week_off: 0, casual: 0, sick: 0, paid: 0 };
+    const cells = days.map((d) => {
+      const rec = byKey.get(`${u.uid}_${d}`), lv = leaveOn(u.uid, d);
+      // Days in the future or before the person joined only count if something was recorded.
+      if (!rec && !lv && (d > today || d < joined)) return { d, st: null };
+      const st = dayStatus(rec, lv);
+      tally[st === 'late' ? 'present' : st]++;
+      if (st === 'late') tally.late++;
+      return { d, st, rec };
+    });
+    return { u, cells, tally };
+  });
+  return { month, days, rows };
+}
+
+const CELL_CODE = (st) => (st === 'present' || st === 'late' ? 'P' : st === 'absent' ? 'A' : LEAVE_CODE[st]);
+
+async function renderHrMonthly() {
+  const data = await monthData();
+  if (!data) return;
+  const { month, days, rows } = data;
+  const [y, m] = month.split('-').map(Number);
+  $('#hrMonthTitle').textContent = new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const wd = (d) => new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
+  const sun = (d) => new Date(d + 'T00:00').getDay() === 0;
+  $('#hrMonthHead').innerHTML = `<tr><th class="mem">Member</th>${days.map((d) => `<th class="${sun(d) ? 'sun' : ''}">${+d.slice(8)}<small>${wd(d)}</small></th>`).join('')}
+    <th class="tot">Present</th><th class="tot">Late</th><th class="tot">Absent</th><th class="tot">Leave</th></tr>`;
+  $('#hrMonthBody').innerHTML = rows.length ? rows.map(({ u, cells, tally }) => `<tr>
+      <td class="mem"><div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div></td>
+      ${cells.map((c) => (c.st
+        ? `<td class="mc"><button class="mcell st-${c.st}" data-day="${c.d}" title="${esc(u.name)} · ${niceDate(c.d)} · ${statusLabel(c.st, c.rec)}${c.rec?.mark ? ` (marked by ${esc(c.rec.markedByName || 'HR')})` : ''}">${CELL_CODE(c.st)}${c.rec?.mark ? '<i></i>' : ''}</button></td>`
+        : '<td class="mc"><span class="mcell none">·</span></td>')).join('')}
+      <td class="tot ok">${tally.present}</td><td class="tot late">${tally.late}</td><td class="tot abs">${tally.absent}</td>
+      <td class="tot">${tally.week_off + tally.casual + tally.sick + tally.paid}</td>
+    </tr>`).join('') : `<tr><td colspan="${days.length + 5}" class="empty">Nobody in this department.</td></tr>`;
+}
+// Clicking a day opens it in the daily view, where it can be corrected.
+$('#hrMonthBody').addEventListener('click', (e) => {
+  const d = e.target.closest('[data-day]')?.dataset.day;
+  if (!d) return;
+  $('#hrDate').value = d;
+  setHrView('daily');
+});
+
+function renderHrLeaves() {
+  const f = $('#lvFilter').value;
+  const list = leaves.filter((l) => f === 'all' || l.status === f)
+    .sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || b.createdAt - a.createdAt);
+  $('#lvHrBody').innerHTML = list.length ? list.map((l) => {
+    const u = userById(l.uid) || { name: l.name };
+    const act = l.status === 'pending' && canEditFor(l.uid)
+      ? `<button class="btn btn-xs btn-approve" data-lv="${l.id}" data-act="approved">Approve</button><button class="btn btn-xs btn-ghost" data-lv="${l.id}" data-act="rejected">Reject</button>`
+      : l.status === 'pending' ? '<span class="muted small">Ask an admin</span>' : '';
+    return `<tr>
+      <td><div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || l.dept || '')}</small></div></div></td>
+      <td><span class="pill leave">${LEAVE_TYPES[l.type]}</span></td>
+      <td class="nowrap">${lvDates(l)}</td><td class="mono">${leaveDays(l)}</td>
+      <td class="reason">${esc(l.reason) || '<span class="muted">—</span>'}</td>
+      <td>${lvStatus(l)}</td><td class="actions">${act}</td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty">No ${f === 'all' ? '' : LV_PILL[f][1].toLowerCase() + ' '}leave requests.</td></tr>`;
+}
+$('#lvHrBody').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-lv]');
+  if (!b) return;
+  const patch = { status: b.dataset.act, decidedBy: me.uid, decidedByName: me.name, decidedAt: Date.now() };
+  if (await guard(async () => { await store.updateRecord('leaves', b.dataset.lv, patch); return true; })) {
+    toast(patch.status === 'approved' ? 'Leave approved' : 'Leave rejected');
+    renderHr();
+  }
+});
+
+$$('.seg-btn[data-hr]').forEach((b) => b.addEventListener('click', () => setHrView(b.dataset.hr)));
+$('#hrDate').addEventListener('change', renderHrDaily);
+$('#hrMonth').addEventListener('change', renderHrMonthly);
+$('#hrDept').addEventListener('change', renderHr);
+$('#lvFilter').addEventListener('change', renderHrLeaves);
+
+// One file with everyone: totals for the month, then each day's status.
+$('#btnExportMonth').addEventListener('click', async () => {
+  const data = await monthData();
+  if (!data) return;
+  const { month, days, rows } = data;
+  const out = rows.map(({ u, cells, tally: t }) => [u.name, u.email, u.empId, deptOf(u),
+    t.present, t.late, t.absent, t.week_off, t.casual, t.sick, t.paid, t.week_off + t.casual + t.sick + t.paid,
+    ...cells.map((c) => (c.st ? CELL_CODE(c.st) : ''))]);
+  const d = $('#hrDept').value;
+  const deptPart = d === 'all' ? '' : `-${(d === 'none' ? 'no-department' : d).toLowerCase().replace(/\s+/g, '-')}`;
+  downloadCsv(`kosha-lab-attendance-${month}${deptPart}.csv`,
+    ['Name', 'Email', 'Employee ID', 'Department', 'Days present', 'Of which late', 'Days absent',
+      'Week off', 'Casual leave', 'Sick leave', 'Paid leave', 'Total leave', ...days.map((x) => x.slice(8))], out);
+  toast(`Downloaded ${out.length} ${out.length === 1 ? 'person' : 'people'} for ${$('#hrMonthTitle').textContent}`);
 });
 
 // ---------- Devices (operators + admins) ----------

@@ -19,6 +19,10 @@ service cloud.firestore {
       return request.resource.data.get('dept', '') == resource.data.get('dept', '')
         || (resource.data.get('dept', '') == '' && validDept());
     }
+    // HR (and admins) see everyone's attendance, correct it and decide leave. HR can't do this for themselves.
+    function isHR() { return isAdmin() || (isMember() && me().get('dept', '') == 'HR'); }
+    function hrFor(uid) { return isAdmin() || (isHR() && uid != request.auth.uid); }
+    function validMark() { return request.resource.data.get('mark', null) == null || request.resource.data.mark in ['present', 'absent', 'week_off', 'casual', 'sick', 'paid']; }
     function validShift() { return request.resource.data.get('shift', 'day') in ['day', 'night']; }
     // Device records hold a mix of types: counts = { '03W': n, 'Pi': n, 'Cubic': n }, at least one device in total.
     function cnt(d, t) { return d.counts.get(t, 0); }
@@ -33,7 +37,7 @@ service cloud.firestore {
     // Profiles. People create their own profile only as a "member", choosing their department once and
     // their Day / Night shift any time; only admins can set roles, change departments, or remove people.
     match /users/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow read: if isHR() || (signedIn() && request.auth.uid == uid);
       allow create: if isAdmin()
         || (signedIn() && request.auth.uid == uid && request.resource.data.role == 'member'
             && validDept() && validShift());
@@ -54,16 +58,35 @@ service cloud.firestore {
     }
 
     // Attendance: members write only their own record, with a timestamp close to server time.
+    // HR can mark anyone else's day (present, absent or a leave type) without touching their check-in data.
     match /attendance/{id} {
-      allow read: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
-      allow create: if isMember() && request.resource.data.uid == request.auth.uid
-        && id == request.auth.uid + '_' + request.resource.data.date
-        && nearNow(request.resource.data.inTs);
-      allow update: if isMember() && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.inTs == resource.data.inTs
-        && resource.data.outTs == null && nearNow(request.resource.data.outTs);
+      allow read: if isHR() || (isMember() && resource.data.uid == request.auth.uid);
+      allow create: if (isMember() && request.resource.data.uid == request.auth.uid
+          && id == request.auth.uid + '_' + request.resource.data.date
+          && nearNow(request.resource.data.inTs))
+        || (hrFor(request.resource.data.uid) && validMark()
+          && id == request.resource.data.uid + '_' + request.resource.data.date
+          && request.resource.data.keys().hasOnly(['id', 'uid', 'name', 'date', 'shift', 'mark', 'markedBy', 'markedByName', 'markedAt']));
+      allow update: if (isMember() && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.inTs == resource.data.inTs
+          && resource.data.outTs == null && nearNow(request.resource.data.outTs))
+        || (hrFor(resource.data.uid) && validMark()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mark', 'markedBy', 'markedByName', 'markedAt']));
       allow delete: if isAdmin();
+    }
+
+    // Leave: everyone requests their own (pending); HR approves or rejects; people can cancel their own pending requests.
+    match /leaves/{id} {
+      allow read: if isHR() || (isMember() && resource.data.uid == request.auth.uid);
+      allow create: if isMember() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.type in ['week_off', 'casual', 'sick', 'paid']
+        && request.resource.data.from is string && request.resource.data.to is string
+        && request.resource.data.to >= request.resource.data.from;
+      allow update: if hrFor(resource.data.uid) && request.resource.data.uid == resource.data.uid
+        && request.resource.data.status in ['approved', 'rejected'];
+      allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
     }
 
     // Laptop take-home requests: members create pending requests; admins approve / reject / mark returned.

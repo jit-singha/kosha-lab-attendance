@@ -87,8 +87,10 @@ function localStore() {
     async saveAttendance(rec) { s.attendance[rec.id] = { ...s.attendance[rec.id], ...rec }; write(); },
     async attendanceByDate(date) { return Object.values(s.attendance).filter((r) => r.date === date); },
     async attendanceByUser(id) { return Object.values(s.attendance).filter((r) => r.uid === id); },
+    async attendanceBetween(from, to) { return Object.values(s.attendance).filter((r) => r.date >= from && r.date <= to); },
     async lateRecords() { return Object.values(s.attendance).filter((r) => r.late); },
     async clearAttendance() { s.attendance = {}; write(); },
+    async listLeaves(forUid) { return Object.values(s.leaves || {}).filter((r) => !forUid || r.uid === forUid); },
     async addLaptop(rec) { const id = uid(); s.laptops[id] = { ...rec, id }; write(); },
     async listLaptops(forUid) { return Object.values(s.laptops).filter((r) => !forUid || r.uid === forUid); },
     async updateLaptop(id, patch) { Object.assign(s.laptops[id], patch); write(); },
@@ -162,7 +164,9 @@ async function firebaseStore() {
     async saveAttendance(rec) { await F.setDoc(ref('attendance', rec.id), rec, { merge: true }); },
     async attendanceByDate(date) { return all(F.query(col('attendance'), F.where('date', '==', date))); },
     async attendanceByUser(id) { return all(F.query(col('attendance'), F.where('uid', '==', id))); },
+    async attendanceBetween(from, to) { return all(F.query(col('attendance'), F.where('date', '>=', from), F.where('date', '<=', to))); },
     async lateRecords() { return all(F.query(col('attendance'), F.where('late', '==', true))); },
+    async listLeaves(forUid) { return all(forUid ? F.query(col('leaves'), F.where('uid', '==', forUid)) : col('leaves')); },
     async clearAttendance() {
       const docs = await F.getDocs(col('attendance'));
       await Promise.all(docs.docs.map((d) => F.deleteDoc(d.ref)));

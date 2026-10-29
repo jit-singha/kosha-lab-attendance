@@ -28,6 +28,7 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7.5 6.5H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-3.5Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
   </svg>
 
@@ -95,7 +96,8 @@
         <div class="nav-label">Menu</div>
         <nav class="nav">
           <button class="nav-item active" data-tab="punch"><svg class="icon"><use href="#i-checkin"/></svg> Check In</button>
-          <button class="nav-item" data-tab="history" data-member-only><svg class="icon"><use href="#i-calendar"/></svg> My Attendance</button>
+          <button class="nav-item" data-tab="history"><svg class="icon"><use href="#i-calendar"/></svg> My Attendance</button>
+          <button class="nav-item" data-tab="team" data-hr-nav><svg class="icon"><use href="#i-clipboard"/></svg> Team Attendance</button>
           <button class="nav-item" data-tab="dashboard" data-admin-only><svg class="icon"><use href="#i-chart"/></svg> Dashboard</button>
           <button class="nav-item" data-tab="laptops"><svg class="icon"><use href="#i-laptop"/></svg> Laptops</button>
           <button class="nav-item" data-tab="devices" data-devices-nav><svg class="icon"><use href="#i-cpu"/></svg> Devices</button>
@@ -172,12 +174,114 @@
             <div class="stat c-cyan"><label>Avg. check-in</label><span id="myAvg">—</span></div>
           </div>
           <div class="card">
+            <div class="card-head"><h3>My leave</h3><span class="muted small">Approved days in <span id="lvYear"></span></span></div>
+            <div id="lvTiles" class="leave-tiles"></div>
+            <hr class="spaced">
+            <h3>Apply for leave</h3>
+            <form id="leaveForm" class="leave-form">
+              <label class="field"><span>Type</span>
+                <select id="lvType" required>
+                  <option value="week_off">Week off</option>
+                  <option value="casual">Casual leave</option>
+                  <option value="sick">Sick leave</option>
+                  <option value="paid">Paid leave</option>
+                </select>
+              </label>
+              <label class="field"><span>From</span><input id="lvFrom" type="date" required></label>
+              <label class="field"><span>To</span><input id="lvTo" type="date" required></label>
+              <label class="field wide"><span>Reason (optional)</span><input id="lvReason" placeholder="e.g. Fever, family function"></label>
+              <button class="btn btn-primary" type="submit">Request leave</button>
+            </form>
+            <p class="muted small form-note">Requests go to HR for approval. Approved days show as leave instead of absent.</p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>My leave requests</h3></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+                <tbody id="lvMyBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
             <div class="card-head"><h3>My attendance history</h3></div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Date</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th></tr></thead>
                 <tbody id="myBody"></tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TEAM ATTENDANCE (HR + admins) -->
+        <section id="tab-team" class="panel">
+          <div class="toolbar">
+            <div class="seg three hr-seg">
+              <button class="seg-btn active" data-hr="daily">Daily</button>
+              <button class="seg-btn" data-hr="monthly">Monthly</button>
+              <button class="seg-btn" data-hr="leaves">Leave requests <span id="lvBadge" class="count-badge"></span></button>
+            </div>
+            <div class="head-tools">
+              <label class="field inline" data-hr-view="daily"><span>Date</span><input type="date" id="hrDate"></label>
+              <label class="field inline" data-hr-view="monthly" hidden><span>Month</span><input type="month" id="hrMonth"></label>
+              <select id="hrDept" class="small-select" title="Department" data-hr-view="daily monthly"></select>
+              <select id="lvFilter" class="small-select" title="Show" data-hr-view="leaves" hidden>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="all">All requests</option>
+              </select>
+              <button id="btnExportMonth" class="btn btn-primary btn-small" data-hr-view="monthly" hidden>Download month (CSV)</button>
+            </div>
+          </div>
+
+          <div id="hr-daily" class="hr-view">
+            <div class="stats">
+              <div class="stat c-green"><label>Present</label><span id="hrPresent">0</span></div>
+              <div class="stat c-pink"><label>Late</label><span id="hrLate">0</span></div>
+              <div class="stat c-amber"><label>Absent</label><span id="hrAbsent">0</span></div>
+              <div class="stat c-violet"><label>On leave</label><span id="hrLeave">0</span></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3 id="hrDayTitle">Attendance</h3><span class="muted small">Use the last column to correct anyone's day.</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Member</th><th>Shift</th><th>Check in</th><th>Check out</th><th>Status</th><th>Location</th><th>Change to</th></tr></thead>
+                  <tbody id="hrDayBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="hr-monthly" class="hr-view" hidden>
+            <div class="card">
+              <div class="card-head">
+                <h3 id="hrMonthTitle">Month</h3>
+                <div class="legend">
+                  <span><i class="mcell st-present">P</i>Present</span><span><i class="mcell st-late">P</i>Late</span><span><i class="mcell st-absent">A</i>Absent</span>
+                  <span><i class="mcell st-week_off">WO</i>Week off</span><span><i class="mcell st-casual">CL</i>Casual</span><span><i class="mcell st-sick">SL</i>Sick</span><span><i class="mcell st-paid">PL</i>Paid</span>
+                </div>
+              </div>
+              <p class="muted small form-hint">Click any day to open it and correct it. A small dot means HR changed that day.</p>
+              <div class="table-wrap">
+                <table class="month-grid">
+                  <thead id="hrMonthHead"></thead>
+                  <tbody id="hrMonthBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="hr-leaves" class="hr-view" hidden>
+            <div class="card">
+              <div class="card-head"><h3>Leave requests</h3></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Member</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th>Action</th></tr></thead>
+                  <tbody id="lvHrBody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -204,11 +308,12 @@
             </div>
             <button id="btnExport" class="btn btn-ghost btn-small">Export CSV</button>
           </div>
-          <div class="stats">
+          <div class="stats five">
             <div class="stat c-cyan"><label>Total members</label><span id="stTotal">0</span></div>
             <div class="stat c-green"><label>On time</label><span id="stOnTime">0</span></div>
             <div class="stat c-pink"><label>Late</label><span id="stLate">0</span></div>
             <div class="stat c-amber"><label>Absent</label><span id="stAbsent">0</span></div>
+            <div class="stat c-violet"><label>On leave</label><span id="stLeave">0</span></div>
           </div>
           <div class="card">
             <div class="card-head"><h3>Attendance log</h3><span id="rateBadge" class="badge">0% present</span></div>
