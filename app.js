@@ -83,6 +83,11 @@ function shiftTiming(ts, s) {
   return { diff, date: dayKey(new Date(ts - diff * 60000)), late: diff > Number(settings.grace || 0), lateBy: Math.max(0, diff) };
 }
 
+// The IT department works flexible hours: any check-in time counts as present, never late,
+// and it's recorded on the calendar day it happened.
+const isFlexible = (u = me) => deptOf(u) === 'IT';
+const punchTiming = (ts, s) => (isFlexible() ? { diff: 0, date: dayKey(new Date(ts)), late: false, lateBy: 0 } : shiftTiming(ts, s));
+
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
@@ -156,7 +161,7 @@ async function punch(kind) {
   let id, existing;
   try {
     if (kind === 'in') {
-      const date = shiftTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
+      const date = punchTiming(Date.now(), shift).date; // night shifts after midnight belong to the previous date
       id = `${me.uid}_${date}`;
       // Search the member's own records rather than opening today's record directly: for a record that
       // doesn't exist yet the security rules can't confirm whose it is, so a direct read is refused for members.
@@ -175,7 +180,7 @@ async function punch(kind) {
 
   // Late check-ins need a reason.
   const lateReason = $('#lateReason').value.trim();
-  if (kind === 'in' && shiftTiming(Date.now(), shift).late && !lateReason) {
+  if (kind === 'in' && punchTiming(Date.now(), shift).late && !lateReason) {
     $('#lateBox').hidden = false;
     $('#lateReason').focus();
     return setStatus("You're checking in late — please type the reason above, then press Check In again.", 'err');
@@ -187,7 +192,7 @@ async function punch(kind) {
     const loc = await locate();
     const now = Date.now();
     if (kind === 'in') {
-      const { late, lateBy, date } = shiftTiming(now, shift);
+      const { late, lateBy, date } = punchTiming(now, shift);
       await store.saveAttendance({ id, uid: me.uid, name: me.name, date, shift, inTs: now, outTs: null, late, lateBy: late ? lateBy : 0, loc, ...(late ? { lateReason } : {}) });
       $('#lateReason').value = '';
       const where = ` from <b>${esc(loc.place || coords(loc))}</b> <span class="muted">(${coords(loc)}, ±${loc.acc} m)</span>`;
@@ -255,9 +260,10 @@ function renderPolicy() {
   const s = shiftOf(me);
   $$('.seg-btn[data-shift]').forEach((b) => b.classList.toggle('active', b.dataset.shift === s));
   $('#myShiftLabel').textContent = `${SHIFT_LABEL[s]} shift`;
-  $('#shiftLabel').textContent = shiftStart(s);
-  $('#graceLabel').textContent = settings.grace;
-  $('#lateAfterLabel').textContent = fmtMin(lateCutoff(s));
+  const flex = isFlexible();
+  $('#shiftLabel').textContent = flex ? 'Flexible — any time' : shiftStart(s);
+  $('#graceLabel').textContent = flex ? 'Not applied' : `${settings.grace} min`;
+  $('#lateAfterLabel').textContent = flex ? 'Never (IT)' : fmtMin(lateCutoff(s));
 }
 
 async function myRecords() {
@@ -641,7 +647,9 @@ $$('.seg-btn[data-shift]').forEach((b) => b.addEventListener('click', async () =
     const u = userById(me.uid);
     if (u) u.shift = to;
     renderPolicy();
-    setStatus(`You're on the <b>${SHIFT_LABEL[to]} shift</b> — starts ${shiftStart(to)}, late after ${fmtMin(lateCutoff(to))}.`);
+    setStatus(isFlexible()
+      ? `You're on the <b>${SHIFT_LABEL[to]} shift</b> — IT has flexible hours, so any check-in time counts as present.`
+      : `You're on the <b>${SHIFT_LABEL[to]} shift</b> — starts ${shiftStart(to)}, late after ${fmtMin(lateCutoff(to))}.`);
   }
 }));
 $('#btnIn').addEventListener('click', () => punch('in'));
@@ -1520,7 +1528,7 @@ function tick() {
   $('#clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   $('#ringTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   // Show the late-reason box once it's past the late cutoff for this person's shift.
-  if (me) $('#lateBox').hidden = !shiftTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value;
+  if (me) $('#lateBox').hidden = !punchTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value;
   $('#date').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 setInterval(tick, 1000); tick();
