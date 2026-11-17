@@ -1014,7 +1014,10 @@ async function renderHrMonthly() {
       <td class="mem"><div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div></td>
       ${cells.map((c) => (c.st
         ? `<td class="mc"><button class="mcell st-${c.st}" data-day="${c.d}" title="${esc(u.name)} · ${niceDate(c.d)} · ${statusLabel(c.st, c.rec)}${c.rec?.mark ? ` (marked by ${esc(c.rec.markedByName || 'HR')})` : ''}">${CELL_CODE(c.st)}${c.rec?.mark ? '<i></i>' : ''}</button></td>`
-        : '<td class="mc"><span class="mcell none">·</span></td>')).join('')}
+        // Past days with nothing recorded can still be opened and corrected.
+        : c.d <= dayKey() && canEditFor(u.uid)
+          ? `<td class="mc"><button class="mcell none" data-day="${c.d}" title="${esc(u.name)} · ${niceDate(c.d)} · Not recorded (click to mark)">·</button></td>`
+          : '<td class="mc"><span class="mcell none">·</span></td>')).join('')}
       <td class="tot ok">${tally.present}</td><td class="tot late">${tally.late}</td><td class="tot abs">${tally.absent}</td>
       <td class="tot">${tally.week_off + tally.casual + tally.sick + tally.paid}</td>
     </tr>`).join('') : `<tr><td colspan="${days.length + 5}" class="empty">Nobody in this department.</td></tr>`;
