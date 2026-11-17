@@ -1540,12 +1540,55 @@ $('#btnWipe').addEventListener('click', async () => {
   if (await guard(async () => { await store.clearAttendance(); return true; })) toast('Logs cleared');
 });
 
+// ---------- Daily motivation ----------
+// One line per person per day: it changes every day, and different people usually see different lines.
+const DAILY_LINES = [
+  'If you work hard, you can achieve anything.',
+  'Small steps every day add up to big results.',
+  'Your effort today builds your success tomorrow.',
+  'Great things are done by a series of small things brought together.',
+  'Believe in yourself — you are capable of more than you think.',
+  'Every day is a fresh start. Make it count.',
+  'Progress, not perfection.',
+  'The team is stronger because you are in it.',
+  'Discipline is choosing what you want most over what you want now.',
+  'Do something today that your future self will thank you for.',
+  'Hard work beats talent when talent doesn’t work hard.',
+  'You don’t have to be great to start, but you have to start to be great.',
+  'Focus on the goal, not the obstacles.',
+  'A positive attitude makes every task lighter.',
+  'Consistency is what turns average into excellent.',
+  'Your work matters — thank you for showing up.',
+  'Dream big, start small, act now.',
+  'Mistakes are proof that you are trying.',
+  'Stay patient and trust the process.',
+  'Be the reason someone smiles at work today.',
+  'Success is the sum of small efforts repeated every day.',
+  'Push yourself, because no one else is going to do it for you.',
+  'The best way to get started is to stop talking and begin doing.',
+  'You are one good day away from a great week.',
+  'Learn something new today — it all adds up.',
+  'Teamwork makes the dream work.',
+  'Energy and persistence conquer all things.',
+  'Your dedication does not go unnoticed. Keep going!',
+  'Don’t watch the clock; do what it does — keep going.',
+  'Today is a great day to do great work.',
+  'Every expert was once a beginner.',
+];
+function dailyLine(uid, d = new Date()) {
+  const day = Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 864e5);
+  let h = 0;
+  for (const ch of String(uid || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return DAILY_LINES[(day + h) % DAILY_LINES.length];
+}
+
 // ---------- Clock ----------
 function tick() {
   const d = new Date();
   $('#clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   $('#ringTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   $('#greeting').textContent = d.getHours() < 12 ? 'Good morning' : d.getHours() < 17 ? 'Good afternoon' : 'Good evening';
+  if (me) $('#dailyLine').textContent = dailyLine(me.uid, d);
   $('#todayDate').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
   // Show the late-reason box once it's past the late cutoff for this person's shift.
   if (me) $('#lateBox').hidden = !!todayRec || (!punchTiming(d.getTime(), shiftOf(me)).late && !$('#lateReason').value);
