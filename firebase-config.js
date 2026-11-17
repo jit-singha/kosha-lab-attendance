@@ -10,6 +10,11 @@ export const firebaseConfig = {
   appId: '1:23407856873:web:6428661b1ce00abe273478',
 };
 
+// Google Maps API key (Google Cloud console → APIs & Services → Credentials).
+// Enable "Geocoding API" and "Maps Embed API" for it, and restrict it to this site's address.
+// With a key: precise Google addresses and a satellite map. Empty: free OpenStreetMap is used instead.
+export const GOOGLE_MAPS_KEY = '';
+
 // The owner's email. This account is always an admin and can give admin access to others.
 // Use the same email in firestore.rules.
 export const OWNER_EMAIL = 'js0234092@gmail.com';
