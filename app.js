@@ -1,6 +1,6 @@
 // Kosha Lab Attendance Tracker
 import { createStore } from './store.js';
-import { OWNER_EMAIL } from './firebase-config.js';
+import { OWNER_EMAIL, GOOGLE_MAPS_KEY } from './firebase-config.js';
 
 const PAGES = {
   punch: ['Check In', "Record today's attendance with time and location."],
@@ -121,7 +121,26 @@ function getPrecisePosition(onUpdate, ms = 15000) {
   });
 }
 
+// Google knows far more Indian buildings, plots and house numbers than OpenStreetMap.
+// Prefer the most specific result (a building or street address) over area-level ones.
+const GOOGLE_PREFERRED = ['premise', 'subpremise', 'street_address', 'establishment', 'point_of_interest', 'plus_code', 'route'];
+async function googleGeocode(lat, lng) {
+  if (!GOOGLE_MAPS_KEY) return null;
+  try {
+    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=en&key=${GOOGLE_MAPS_KEY}`);
+    const j = await r.json();
+    if (j.status !== 'OK' || !j.results?.length) return null;
+    for (const t of GOOGLE_PREFERRED) {
+      const hit = j.results.find((x) => x.types?.includes(t));
+      if (hit) return hit.formatted_address;
+    }
+    return j.results[0].formatted_address;
+  } catch { return null; }
+}
+
 async function reverseGeocode(lat, lng) {
+  const g = await googleGeocode(lat, lng);
+  if (g) return g;
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`);
     const j = await r.json();
@@ -237,22 +256,29 @@ function statusPill(r, leave) {
   return `<span class="pill ${cls}">${statusLabel(st, r)}</span>${by}`;
 }
 
-function locCell(r) {
-  const loc = r?.loc;
-  if (!loc) return '<span class="muted">—</span>';
+// One location (check-in or check-out): the address opens the map; exact coordinates and accuracy below.
+function locLine(r, loc, which) {
   const approx = loc.source === 'ip' || loc.precise === false;
   const acc = loc.acc != null ? `±${loc.acc} m` : 'IP based';
-  return `<button class="loc" data-map="${esc(r.id)}">${esc(loc.place || coords(loc))}</button>
+  return `<button class="loc" data-map="${esc(r.id)}" data-which="${which}">${which === 'out' ? '<span class="muted">Out: </span>' : ''}${esc(loc.place || coords(loc))}</button>
     <small class="coords">${coords(loc)} · <span class="${approx ? 'acc-bad' : 'acc-good'}">${approx ? 'approximate ' : ''}${acc}</span></small>`;
+}
+function locCell(r) {
+  if (!r?.loc) return '<span class="muted">—</span>';
+  return locLine(r, r.loc, 'in') + (r.outLoc ? locLine(r, r.outLoc, 'out') : '');
 }
 
 const mapRecords = new Map();
-function openMap(r) {
-  const loc = r.loc, d = 0.002;
-  $('#mapTitle').textContent = `${userById(r.uid)?.name || r.name || 'Member'} — ${r.date} ${hm(r.inTs)}`;
+function openMap(r, which = 'in') {
+  const out = which === 'out' && r.outLoc;
+  const loc = out ? r.outLoc : r.loc, d = 0.002;
+  $('#mapTitle').textContent = `${userById(r.uid)?.name || r.name || 'Member'} — ${r.date} · ${out ? 'checked out' : 'checked in'} ${hm(out ? r.outTs : r.inTs)}`;
   $('#mapAddr').textContent = loc.place || 'Address not available';
   $('#mapMeta').textContent = `${coords(loc)} · accuracy ±${loc.acc ?? '?'} m`;
-  $('#mapFrame').src = `https://www.openstreetmap.org/export/embed.html?bbox=${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
+  // Google: zoomed-in satellite view with a pin. Without a key: OpenStreetMap.
+  $('#mapFrame').src = GOOGLE_MAPS_KEY
+    ? `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_KEY}&q=${loc.lat},${loc.lng}&zoom=19&maptype=satellite`
+    : `https://www.openstreetmap.org/export/embed.html?bbox=${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
   $('#mapGoogle').href = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
   $('#mapModal').classList.add('open');
 }
@@ -704,9 +730,9 @@ function downloadCsv(filename, header, rows) {
 }
 
 document.addEventListener('click', (e) => {
-  const id = e.target.closest('[data-map]')?.dataset.map;
-  const r = id && mapRecords.get(id);
-  if (r?.loc) openMap(r);
+  const btn = e.target.closest('[data-map]');
+  const r = btn && mapRecords.get(btn.dataset.map);
+  if (r?.loc) openMap(r, btn.dataset.which);
 });
 $('#mapClose').addEventListener('click', closeMap);
 $('#mapModal').addEventListener('click', (e) => { if (e.target.id === 'mapModal') closeMap(); });
