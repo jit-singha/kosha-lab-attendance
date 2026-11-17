@@ -80,7 +80,8 @@ function localStore() {
       write();
     },
     async getSettings() { return { ...DEFAULT_SETTINGS, ...s.settings }; },
-    async saveSettings(v) { s.settings = { ...s.settings, ...v }; write(); },
+    // Like Firestore's merge: nested maps (the week-off roster) are merged, not replaced.
+    async saveSettings(v) { s.settings = { ...s.settings, ...v, ...(v.roster ? { roster: { ...s.settings?.roster, ...v.roster } } : {}) }; write(); },
     async getBranding() { return s.branding || {}; },
     async saveBranding(v) { s.branding = { ...s.branding, ...v }; write(); },
     async getAttendance(id) { return s.attendance[id] || null; },
