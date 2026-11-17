@@ -750,7 +750,23 @@ $$('.seg-btn[data-auth]').forEach((b) => b.addEventListener('click', () => {
   $('#authBtn').textContent = authMode === 'signup' ? 'Create account' : 'Sign in';
   $('#authTitle').textContent = authMode === 'signup' ? 'Create your account' : 'Welcome back';
   $('#authErr').textContent = '';
+  $('#authOk').hidden = true;
+  $('#forgotBtn').hidden = authMode === 'signup';
 }));
+
+// Forgot password: Firebase emails a link to set a new one.
+$('#forgotBtn').addEventListener('click', async () => {
+  const email = $('#aEmail').value.trim();
+  $('#authErr').textContent = ''; $('#authOk').hidden = true;
+  if (!email || !$('#aEmail').checkValidity()) { $('#authErr').textContent = 'Type your email above first, then tap “Forgot password?”.'; $('#aEmail').focus(); return; }
+  const btn = $('#forgotBtn'); btn.disabled = true;
+  const ok = await guard(async () => { await store.resetPassword(email); return true; }, $('#authErr'));
+  btn.disabled = false;
+  if (ok) {
+    $('#authOk').textContent = `If ${email} has a Kosha Lab account, a password reset link is on its way. Check your inbox (and spam), set a new password, then sign in here.`;
+    $('#authOk').hidden = false;
+  }
+});
 
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
