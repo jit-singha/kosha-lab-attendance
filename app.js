@@ -1,5 +1,5 @@
 // Kosha Lab Attendance Tracker
-import { createStore } from './store.js';
+import { createStore } from './store.js?v=2026-11-17a';
 import { OWNER_EMAIL, GOOGLE_MAPS_KEY } from './firebase-config.js';
 
 const PAGES = {
