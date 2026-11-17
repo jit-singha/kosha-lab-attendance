@@ -98,6 +98,7 @@
           <button class="nav-item active" data-tab="punch"><svg class="icon"><use href="#i-checkin"/></svg> Check In</button>
           <button class="nav-item" data-tab="history"><svg class="icon"><use href="#i-calendar"/></svg> My Attendance</button>
           <button class="nav-item" data-tab="team" data-hr-nav><svg class="icon"><use href="#i-clipboard"/></svg> Team Attendance</button>
+          <button class="nav-item" data-tab="weekoff" data-weekoff-nav><svg class="icon"><use href="#i-calendar"/></svg> Week Off</button>
           <button class="nav-item" data-tab="dashboard" data-admin-only><svg class="icon"><use href="#i-chart"/></svg> Dashboard</button>
         </nav>
         <div class="nav-label">Operations</div>
@@ -551,7 +552,7 @@
             <div class="card-head"><h3>Team members</h3><span id="memberCount" class="badge">0 people</span></div>
             <div class="table-wrap">
               <table class="member-table">
-                <thead><tr><th>Member</th><th>Department</th><th>Access</th><th>Shift</th><th></th></tr></thead>
+                <thead><tr><th>Member</th><th>Department</th><th>Access</th><th>Shift</th><th>Week off</th><th></th></tr></thead>
                 <tbody id="memberList"></tbody>
               </table>
             </div>
@@ -559,6 +560,32 @@
         </section>
 
         <!-- SETTINGS (admin) -->
+        <!-- WEEK OFF ROSTER -->
+        <section id="tab-weekoff" class="panel">
+          <div class="card wo-switch" data-admin-only>
+            <label class="switch-row"><input type="checkbox" id="woToggle" checked>
+              <span><b>Show Week Off tab to members</b><small class="muted">When off, only admins can see this tab. Week offs still count in attendance.</small></span></label>
+          </div>
+          <p id="woMine" class="daily-line"></p>
+          <div class="card">
+            <div class="card-head"><h3>This week</h3><span id="woHint" class="muted small"></span></div>
+            <div id="woRoster" class="wo-roster"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Next week</h3></div>
+            <div id="woRosterNext" class="wo-roster"></div>
+          </div>
+          <div class="card" data-admin-only>
+            <div class="card-head"><h3>Change week offs</h3><span class="muted small">Pick this week's day; next weeks move on automatically.</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Member</th><th>Department</th><th>This week</th><th>Next week</th></tr></thead>
+                <tbody id="woEdit"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <section id="tab-settings" class="panel">
           <div class="card settings">
             <h3>Shift rules</h3>
