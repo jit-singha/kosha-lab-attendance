@@ -108,18 +108,36 @@ const GOOD_ACCURACY = 25;   // metres: stop sampling once a fix is this precise
 const PRECISE_LIMIT = 100;  // metres: fixes worse than this are flagged as approximate
 
 // Watch GPS for up to `ms`, keeping the most accurate fix.
+// Phones often report a passing "unavailable"/"timeout" error while the GPS warms up; those used to
+// abort the check-in on the first press (it then worked on the second). Now only "permission denied"
+// stops early; otherwise we keep listening, and if GPS gives nothing at all we fall back to the
+// phone's network location so one press is enough.
 function getPrecisePosition(onUpdate, ms = 15000) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject({ code: 0 });
-    let best = null;
-    const finish = () => { navigator.geolocation.clearWatch(watch); clearTimeout(timer); best ? resolve(best) : reject({ code: 3 }); };
+    let best = null, lastErr = null, done = false;
+    const stop = () => { done = true; navigator.geolocation.clearWatch(watch); clearTimeout(timer); };
+    const fallback = () => navigator.geolocation.getCurrentPosition(resolve, (e) => reject(lastErr || e),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
+    const finish = () => { if (done) return; stop(); best ? resolve(best) : fallback(); };
     const watch = navigator.geolocation.watchPosition((p) => {
+      if (done) return;
       if (!best || p.coords.accuracy < best.coords.accuracy) { best = p; onUpdate?.(Math.round(p.coords.accuracy)); }
       if (p.coords.accuracy <= GOOD_ACCURACY) finish();
-    }, (err) => { if (err.code === 1 || !best) { navigator.geolocation.clearWatch(watch); clearTimeout(timer); reject(err); } },
-    { enableHighAccuracy: true, timeout: ms, maximumAge: 0 });
+    }, (err) => {
+      if (done) return;
+      lastErr = err;
+      if (err.code === 1) { stop(); reject(err); }
+    }, { enableHighAccuracy: true, maximumAge: 0 });
     const timer = setTimeout(finish, ms);
   });
+}
+
+// Never let a slow address service hold up a check-in.
+async function fetchJson(url, ms = 6000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await (await fetch(url, { signal: ctl.signal })).json(); } finally { clearTimeout(t); }
 }
 
 // Google knows far more Indian buildings, plots and house numbers than OpenStreetMap.
@@ -128,8 +146,7 @@ const GOOGLE_PREFERRED = ['premise', 'subpremise', 'street_address', 'establishm
 async function googleGeocode(lat, lng) {
   if (!GOOGLE_MAPS_KEY) return null;
   try {
-    const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=en&key=${GOOGLE_MAPS_KEY}`);
-    const j = await r.json();
+    const j = await fetchJson(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=en&key=${GOOGLE_MAPS_KEY}`);
     if (j.status !== 'OK' || !j.results?.length) return null;
     for (const t of GOOGLE_PREFERRED) {
       const hit = j.results.find((x) => x.types?.includes(t));
@@ -143,8 +160,7 @@ async function reverseGeocode(lat, lng) {
   const g = await googleGeocode(lat, lng);
   if (g) return g;
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`);
-    const j = await r.json();
+    const j = await fetchJson(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`);
     const a = j.address || {};
     const street = [a.house_number, a.road].filter(Boolean).join(' ');
     const parts = [a.building || a.amenity || a.office, street, a.neighbourhood || a.suburb || a.quarter, a.city || a.town || a.village || a.county, a.state, a.postcode].filter(Boolean);
