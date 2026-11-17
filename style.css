@@ -525,6 +525,9 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .today { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 20px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
 .today small { display: block; font-size: 13px; color: var(--muted); }
 .today h2 { font-size: 22px; font-weight: 650; letter-spacing: -.4px; margin: 2px 0 10px; }
+.daily-line { margin: 0 0 16px; padding: 10px 14px; border-left: 3px solid var(--primary); border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); font-size: 14px; line-height: 1.45; font-style: italic; }
+.daily-line::before { content: '✨ '; font-style: normal; }
+.daily-line:empty { display: none; }
 .today-time { text-align: right; }
 .today-time span { display: block; font-size: 34px; font-weight: 650; letter-spacing: -1px; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .today-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-2); padding: 4px 10px 4px 8px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); }
