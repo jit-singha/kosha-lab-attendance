@@ -69,6 +69,8 @@ function localStore() {
       if (!a || a.password !== password) throw err('invalid-credential');
       s.session = a.uid; write(); emit();
     },
+    // Demo accounts live in this browser only, so there is no email to send.
+    async resetPassword() { throw new Error('Demo mode can’t send emails. Create a new demo account instead.'); },
     async signOut() { s.session = null; write(); emit(); },
     async createMember(data, password) { makeAccount(data, password); },
     async listUsers() { return Object.values(s.users); },
@@ -142,6 +144,7 @@ async function firebaseStore() {
       try { await signingUp; } finally { signingUp = null; }
     },
     async signIn(email, password) { await A.signInWithEmailAndPassword(auth, email.trim(), password); },
+    async resetPassword(email) { await A.sendPasswordResetEmail(auth, email.trim()); },
     async signOut() { await A.signOut(auth); },
     async createMember(data, password) {
       // A second app instance creates the account without signing the admin out.
