@@ -54,7 +54,9 @@ service cloud.firestore {
         || (signedIn() && request.auth.uid == uid && request.resource.data.role == 'member'
             && validDept() && validShift());
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role && deptOk() && validShift());
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role && deptOk() && validShift()
+            && request.resource.data.get('weekOff', null) == resource.data.get('weekOff', null)
+            && request.resource.data.get('weekOffWeek', null) == resource.data.get('weekOffWeek', null));
       allow delete: if isAdmin();
     }
 
