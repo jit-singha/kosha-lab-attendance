@@ -547,3 +547,12 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
   .today { flex-direction: column-reverse; }
   .today-time { text-align: left; }
 }
+
+/* Week-off roster */
+.wo-roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 4px 0; }
+.wo-day { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.wo-day b { width: 100%; font-size: 13px; }
+.wo-today { outline: 2px solid var(--primary); }
+.switch-row { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.switch-row input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); }
+.switch-row small { display: block; }
