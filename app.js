@@ -9,6 +9,7 @@ const PAGES = {
   dashboard: ['Dashboard', 'Daily overview of attendance, late arrivals and locations.'],
   laptops: ['Laptops', 'Requests to take company laptops home, approvals and returns.'],
   devices: ['Devices', 'Daily device deployments, where they went, and damage reports.'],
+  weekoff: ['Week Off', "Everyone's fixed weekly off day."],
   members: ['Team & Access', 'Add members and choose their access: member, operator or admin.'],
   settings: ['Settings', 'Configure shift timings and manage data.'],
 };
@@ -240,16 +241,29 @@ const LEAVE_CODE = { week_off: 'WO', casual: 'CL', sick: 'SL', paid: 'PL' };
 const MARKS = { present: 'Present', absent: 'Absent', ...LEAVE_TYPES };
 // IT has flexible hours, so their check-ins are never late, including ones saved before that rule.
 const isLate = (r) => !!r?.late && deptOf(userById(r.uid) || (r.uid === me?.uid ? me : null)) !== 'IT';
-function dayStatus(r, leave) {
+// Rotating week off (0 = Sunday … 6 = Saturday). An admin picks this week's day (weekOff, in week
+// weekOffWeek); every following week it moves one day later, so it is never the same day two weeks running.
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const addDays = (date, n) => { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate() + n); return dayKey(d); };
+// Weeks run Monday to Sunday. 1970-01-01 was a Thursday, hence the +3.
+const weekIdx = (date) => Math.floor((Math.round(Date.UTC(...date.split('-').map((x, i) => Number(x) - (i === 1 ? 1 : 0))) / 86400000) + 3) / 7);
+const hasWeekOff = (u) => Number.isInteger(u?.weekOff) && u.weekOff >= 0 && u.weekOff <= 6;
+const weekOffDay = (u, date) => {
+  const shift = Number.isInteger(u.weekOffWeek) ? weekIdx(date) - u.weekOffWeek : 0;
+  return (((u.weekOff + shift) % 7) + 7) % 7;
+};
+const weekOffOn = (u, date) => hasWeekOff(u) && !!date && new Date(`${date}T12:00:00`).getDay() === weekOffDay(u, date);
+function dayStatus(r, leave, u, date) {
   if (r?.mark) return r.mark;
   if (r?.inTs) return isLate(r) ? 'late' : 'present';
-  return leave ? leave.type : 'absent';
+  if (leave) return leave.type;
+  return weekOffOn(u, date) ? 'week_off' : 'absent';
 }
 const isPresent = (st) => st === 'present' || st === 'late';
 const statusLabel = (st, r) => (st === 'late' ? 'Late' : st === 'present' ? (r?.inTs && !r.mark ? 'On time' : 'Present') : MARKS[st]);
 
-function statusPill(r, leave) {
-  const st = dayStatus(r, leave);
+function statusPill(r, leave, u, date) {
+  const st = dayStatus(r, leave, u, date);
   const by = r?.mark ? `<small class="coords">Marked by ${esc(r.markedByName || 'HR')}</small>` : '';
   if (st === 'late') return `<span class="pill late">Late · ${fmtLate(r.lateBy)}</span>${r.lateReason ? `<small class="late-reason">“${esc(r.lateReason)}”</small>` : ''}`;
   const cls = st === 'present' ? 'ontime' : st === 'absent' ? 'absent' : 'leave';
@@ -313,7 +327,7 @@ async function renderRecent() {
 let todayRec = null;
 function renderTodayStatus(recs) {
   const today = todayRec = recs.find((r) => r.date === punchTiming(Date.now(), shiftOf(me)).date) || null;
-  let cls = '', text = 'Not checked in yet today';
+  let cls = '', text = weekOffOn(me, dayKey()) ? 'Today is your week off — enjoy your day 🌴' : 'Not checked in yet today';
   if (today?.outTs) { cls = 'done'; text = `Checked in ${hm(today.inTs)} · checked out ${hm(today.outTs)}`; }
   else if (today) { cls = isLate(today) ? 'late' : 'in'; text = `Checked in at ${hm(today.inTs)} · ${isLate(today) ? `late by ${fmtLate(today.lateBy)}` : 'on time'}`; }
   $('#todayStatus').className = 'today-status ' + cls;
@@ -357,7 +371,7 @@ async function renderDashboard() {
   if (!logs) return;
   logs.forEach((r) => mapRecords.set(r.id, r));
   const roster = dashRoster(logs).map((x) => ({ ...x, lv: leaveOn(x.u.uid, date) }));
-  const sts = roster.map((x) => dayStatus(x.rec, x.lv));
+  const sts = roster.map((x) => dayStatus(x.rec, x.lv, x.u, date));
   const presentCount = sts.filter(isPresent).length;
   $('#stTotal').textContent = roster.length;
   $('#stOnTime').textContent = sts.filter((s) => s === 'present').length;
@@ -368,7 +382,7 @@ async function renderDashboard() {
 
   const rows = roster.map(({ u, rec: l, shift, lv }) => {
     const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
-    return { sort: l?.inTs || Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l?.inTs ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l, lv)}</td><td>${locCell(l)}</td></tr>` };
+    return { sort: l?.inTs || Infinity, html: `<tr><td>${who}</td><td>${shiftPill(shift)}</td><td class="mono">${l?.inTs ? hm(l.inTs) : '—'}</td><td class="mono">${l?.outTs ? hm(l.outTs) : '—'}</td><td>${statusPill(l, lv, u, date)}</td><td>${locCell(l)}</td></tr>` };
   }).sort((a, b) => a.sort - b.sort);
   $('#logBody').innerHTML = rows.length ? rows.map((r) => r.html).join('') : `<tr><td colspan="6" class="empty">${users.length ? 'Nobody matches these filters.' : 'No members yet.'}</td></tr>`;
 
@@ -408,14 +422,82 @@ function renderMembers() {
     const shiftSel = `<select class="small-select dept-select shift-sel-${shiftOf(u)}" data-shift-select="${u.uid}" title="Shift">
         ${Object.entries(SHIFT_LABEL).map(([v, l]) => `<option value="${v}"${shiftOf(u) === v ? ' selected' : ''}>${l} shift</option>`).join('')}
       </select>`;
+    const woSel = weekOffSelect(u);
     const delBtn = owner || self ? '' : `<button class="del" data-del="${u.uid}" title="Remove member" aria-label="Remove ${esc(u.name)}">${icon('x')}</button>`;
     return `<tr>
       <td><div class="who"><button class="photo-btn" data-photo="${u.uid}" title="Change photo">${avatar(u)}<span class="cam">${icon('camera')}</span></button>
         <div>${esc(u.name)}${self ? ' <span class="muted">(you)</span>' : ''}<small>${esc(u.email)}${u.empId ? ` · ${esc(u.empId)}` : ''}</small></div></div></td>
-      <td>${deptSel}</td><td>${access}</td><td>${shiftSel}</td><td class="actions">${delBtn}</td>
+      <td>${deptSel}</td><td>${access}</td><td>${shiftSel}</td><td>${woSel}</td><td class="actions">${delBtn}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="empty">No members yet.</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">No members yet.</td></tr>';
 }
+
+// Week Off tab. Everyone can read the shared roster (kept in settings, since members can't list
+// other profiles); admins see the live team list and can change anyone's day here.
+async function renderWeekOff() {
+  if (isAdmin()) users = (await guard(() => store.listUsers())) || users;
+  else settings = (await guard(() => store.getSettings())) || settings;
+  const people = (isAdmin()
+    ? users.map((u) => ({ uid: u.uid, name: u.name, weekOff: u.weekOff, weekOffWeek: u.weekOffWeek }))
+    : Object.entries(settings.roster || {}).filter(([, v]) => v).map(([uid, v]) => ({ uid, ...v }))
+  ).filter(hasWeekOff).sort((a, b) => a.name.localeCompare(b.name));
+  const today = dayKey();
+  const meWO = people.find((p) => p.uid === me.uid) || me;
+  $('#woMine').textContent = hasWeekOff(meWO)
+    ? `Your week off this week: ${WEEKDAYS[weekOffDay(meWO, today)]} · next week: ${WEEKDAYS[weekOffDay(meWO, addDays(today, 7))]}.`
+    : 'Your week off has not been set yet — ask an admin.';
+  $('#woHint').textContent = isAdmin() ? 'Each person moves one day later every week, so nobody gets the same day twice in a row.' : 'Set by admins · changes every week.';
+  $('#woToggle').checked = settings.showWeekOff !== false;
+  // This week and next week, Monday to Sunday, with dates.
+  const monday = addDays(today, -((new Date(`${today}T12:00:00`).getDay() + 6) % 7));
+  const week = (start) => Array.from({ length: 7 }, (_, i) => addDays(start, i)).map((d) => {
+    const off = people.filter((p) => weekOffDay(p, d) === new Date(`${d}T12:00:00`).getDay());
+    return `<div class="wo-day${d === today ? ' wo-today' : ''}"><b>${WEEKDAYS[new Date(`${d}T12:00:00`).getDay()]} · ${shortDate(d)}${d === today ? ' · today' : ''}</b>${off.length ? off.map((p) => `<span class="pill leave">${esc(p.name)}${p.uid === me.uid ? ' (you)' : ''}</span>`).join('') : '<span class="muted small">Nobody off</span>'}</div>`;
+  }).join('');
+  $('#woRoster').innerHTML = week(monday);
+  $('#woRosterNext').innerHTML = week(addDays(monday, 7));
+  if (isAdmin()) {
+    $('#woEdit').innerHTML = [...users].sort(byName).map((u) => `<tr><td><div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(u.email)}</small></div></div></td><td>${esc(deptOf(u) || '—')}</td>
+      <td>${weekOffSelect(u)}</td><td class="muted small">${hasWeekOff(u) ? WEEKDAYS[weekOffDay(u, addDays(today, 7))] : '—'}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No members yet.</td></tr>';
+  }
+}
+
+// The menu shows (and sets) this week's day; later weeks follow from it.
+function weekOffSelect(u) {
+  const cur = hasWeekOff(u) ? weekOffDay(u, dayKey()) : null;
+  return `<select class="small-select dept-select" data-weekoff-select="${u.uid}" title="Week off this week">
+    <option value=""${cur == null ? ' selected' : ''}>No week off</option>
+    ${WEEKDAYS.map((w, i) => `<option value="${i}"${cur === i ? ' selected' : ''}>${w}</option>`).join('')}
+  </select>`;
+}
+
+async function setWeekOff(uid, v) {
+  const u = userById(uid);
+  const patch = { weekOff: v, weekOffWeek: v == null ? null : weekIdx(dayKey()) };
+  const entry = v == null ? null : { name: u.name, ...patch };
+  const ok = await guard(async () => {
+    await store.updateUser(uid, patch);
+    await store.saveSettings({ roster: { [uid]: entry } });
+    return true;
+  });
+  if (ok) {
+    Object.assign(u, patch); if (uid === me.uid) Object.assign(me, patch);
+    settings.roster = { ...(settings.roster || {}), [uid]: entry };
+    toast(v == null ? `${u.name} has no week off now` : `${u.name}'s week off this week is ${WEEKDAYS[v]}; next week ${WEEKDAYS[(v + 1) % 7]}`);
+  }
+  currentTab === 'weekoff' ? renderWeekOff() : renderMembers();
+}
+document.addEventListener('change', async (e) => {
+  const sel = e.target.closest('[data-weekoff-select]');
+  if (sel) return setWeekOff(sel.dataset.weekoffSelect, sel.value === '' ? null : Number(sel.value));
+  if (e.target.id === 'woToggle') {
+    const showWeekOff = e.target.checked;
+    if (await guard(async () => { await store.saveSettings({ showWeekOff }); return true; })) {
+      settings.showWeekOff = showWeekOff;
+      toast(showWeekOff ? 'Members can now see the Week Off tab' : 'Week Off tab hidden from members');
+    } else e.target.checked = !showWeekOff;
+  }
+});
 
 // Laptop request status, including derived "overdue".
 function lpState(r) {
@@ -493,12 +575,15 @@ function showTab(tab) {
   const [t, s] = PAGES[tab];
   $('#pageTitle').textContent = t; $('#pageSub').textContent = s;
   $('.clock-card').hidden = tab === 'punch'; // the Check In panel shows the time itself
-  ({ punch: renderRecent, history: renderHistory, team: renderHr, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers }[tab] || (() => {}))();
+  ({ punch: renderRecent, history: renderHistory, team: renderHr, dashboard: renderDashboard, laptops: renderLaptops, devices: loadDevices, members: renderMembers, weekoff: renderWeekOff }[tab] || (() => {}))();
 }
 
 async function loadShared() {
   settings = (await guard(() => store.getSettings())) || settings;
   users = isHR() ? (await guard(() => store.listUsers())) || [] : [me];
+  // Admins can hide the Week Off tab from everyone else.
+  $$('[data-weekoff-nav]').forEach((el) => { el.hidden = !(isAdmin() || settings.showWeekOff !== false); });
+  if (currentTab === 'weekoff' && !isAdmin() && settings.showWeekOff === false) showTab('punch');
   renderPolicy();
   $('#setStart').value = settings.start;
   $('#setNightStart').value = settings.nightStart || '21:00';
@@ -705,7 +790,7 @@ $('#btnExport').addEventListener('click', async () => {
   if (!logs) return;
   const f = $('#dashShift').value;
   const rows = dashRoster(logs).sort((a, b) => a.u.name.localeCompare(b.u.name)).map(({ u, rec: l, shift }) => {
-    const loc = l?.loc, st = dayStatus(l, leaveOn(u.uid, date));
+    const loc = l?.loc, st = dayStatus(l, leaveOn(u.uid, date), u, date);
     return [date, u.name, u.email, u.empId, deptOf(u), shift === 'night' ? 'Night' : 'Day', l?.inTs ? hm(l.inTs) : '', l?.outTs ? hm(l.outTs) : '',
       statusLabel(st, l), st === 'late' ? l.lateBy : '', st === 'late' ? l.lateReason : '',
       loc?.place, loc?.lat, loc?.lng, loc?.acc, loc ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : ''];
@@ -789,6 +874,8 @@ $('#memberList').addEventListener('change', async (e) => {
   const roleSel = e.target.closest('[data-role-select]');
   const deptSel = e.target.closest('[data-dept-select]');
   const shiftSel = e.target.closest('[data-shift-select]');
+  const woSel = e.target.closest('[data-weekoff-select]');
+  if (woSel) return; // handled by setWeekOff
   if (shiftSel) {
     const u = userById(shiftSel.dataset.shiftSelect), to = shiftSel.value;
     await changeMember(u, { shift: to }, `${u.name} is now on ${SHIFT_LABEL[to]} shift`);
@@ -965,7 +1052,7 @@ async function renderHrDaily() {
   logs.forEach((r) => { hrLogs.set(r.id, r); mapRecords.set(r.id, r); });
   const people = users.filter(inHrDept).sort(byName).map((u) => {
     const rec = hrLogs.get(`${u.uid}_${date}`), lv = leaveOn(u.uid, date);
-    return { u, rec, lv, st: dayStatus(rec, lv) };
+    return { u, rec, lv, st: dayStatus(rec, lv, u, date) };
   });
   const count = (f) => people.filter((p) => f(p.st)).length;
   $('#hrPresent').textContent = count((s) => s === 'present');
@@ -976,10 +1063,10 @@ async function renderHrDaily() {
   $('#hrDayBody').innerHTML = people.length ? people.map(({ u, rec, lv }) => {
     const who = `<div class="who">${avatar(u)}<div>${esc(u.name)}<small>${esc(deptOf(u) || u.email)}</small></div></div>`;
     const sel = canEditFor(u.uid) ? `<select class="small-select status-select" data-mark="${u.uid}" title="Change attendance">
-        <option value="">${rec?.inTs ? 'As checked in' : lv ? 'As on leave' : 'Not marked'}</option>
+        <option value="">${rec?.inTs ? 'As checked in' : lv ? 'As on leave' : weekOffOn(u, date) ? 'Week off (roster)' : 'Not marked'}</option>
         ${Object.entries(MARKS).map(([v, l]) => `<option value="${v}"${rec?.mark === v ? ' selected' : ''}>${l}</option>`).join('')}
       </select>` : '<span class="muted small">Ask an admin</span>';
-    return `<tr><td>${who}</td><td>${shiftPill(rec?.shift || shiftOf(u))}</td><td class="mono">${rec?.inTs ? hm(rec.inTs) : '—'}</td><td class="mono">${rec?.outTs ? hm(rec.outTs) : '—'}</td><td>${statusPill(rec, lv)}</td><td>${locCell(rec)}</td><td>${sel}</td></tr>`;
+    return `<tr><td>${who}</td><td>${shiftPill(rec?.shift || shiftOf(u))}</td><td class="mono">${rec?.inTs ? hm(rec.inTs) : '—'}</td><td class="mono">${rec?.outTs ? hm(rec.outTs) : '—'}</td><td>${statusPill(rec, lv, u, date)}</td><td>${locCell(rec)}</td><td>${sel}</td></tr>`;
   }).join('') : `<tr><td colspan="7" class="empty">${users.length ? 'Nobody in this department.' : 'No members yet.'}</td></tr>`;
 }
 
@@ -1013,8 +1100,10 @@ async function monthData() {
     const cells = days.map((d) => {
       const rec = byKey.get(`${u.uid}_${d}`), lv = leaveOn(u.uid, d);
       // Days in the future or before the person joined only count if something was recorded.
-      if (!rec && !lv && (d > today || d < joined)) return { d, st: null };
-      const st = dayStatus(rec, lv);
+      if (!rec && !lv && d < joined) return { d, st: null };
+      // Upcoming roster week offs are shown in the sheet but only counted once the day arrives.
+      if (!rec && !lv && d > today) return weekOffOn(u, d) ? { d, st: 'week_off' } : { d, st: null };
+      const st = dayStatus(rec, lv, u, d);
       tally[st === 'late' ? 'present' : st]++;
       if (st === 'late') tally.late++;
       return { d, st, rec };
