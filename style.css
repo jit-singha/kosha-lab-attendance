@@ -556,3 +556,6 @@ button.mcell:focus-visible { outline: 2px solid var(--primary); outline-offset: 
 .switch-row { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
 .switch-row input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); }
 .switch-row small { display: block; }
+.link-btn { background: none; border: 0; padding: 4px 0; color: var(--primary-text); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; align-self: center; }
+.link-btn:disabled { opacity: .5; cursor: default; }
+.form-ok { padding: 10px 12px; border-radius: 8px; background: var(--primary-soft); color: var(--primary-text); font-size: 13px; line-height: 1.45; }
